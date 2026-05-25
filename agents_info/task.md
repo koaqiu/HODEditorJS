@@ -1,0 +1,33 @@
+# Tasks: HOD Editor JS Remaining Enhancements
+
+- [x] **Phase 1: Debugging & Fixing HOD 2.0 Saved Rotations**
+  - [x] Analyze matrix decomposition and Euler representation in `parser/src/hod.rs`
+  - [x] Identify and resolve coordinate transposition/orientation discrepancy
+  - [x] Re-analyze raw joint float preservation to prevent Euler lossiness/rotation issues
+  - [x] Test saving `ter_elysium.hod` and verify 100% identical HIER/MRKS chunks
+- [x] **Phase 2: Restoring HOD 1.0 Material Loading**
+  - [x] Analyze HOD 1.0 parser path for material and texture chunks in `parser/src/hod.rs`
+  - [x] Map legacy structures to unified `materials`/`textures` fields
+  - [x] Verify frontend loading and displaying of legacy materials
+- [x] **Phase 3: Completion of Animation Loading & Editing**
+  - [x] Implement `HODAnimation` structs in Rust and add to `HODModel`
+  - [x] Implement companion `.mad` binary file parsing and serialization
+  - [x] Parse HOD 1.0 embedded `KEYF` animation curves inside `MRKR` chunks
+  - [x] Map parsed animation tracks to the frontend UI timeline
+  - [x] Wire up keyframe addition and timeline editing to backend serialization
+  - [x] Verify correct playback and saving of anims in `ter_fenris.hod`
+  - [x] Add `diagnostics-handle-hover` CSS hover/active glow style in `App.css`
+  - [x] Add pulsing `anim-ready-badge` CSS animation for animation status indicator
+  - [x] Fix animation viewport: tag meshes with `userData.parentJointName` + `userData.baseJointMatrix`
+  - [x] Fix `evaluateAnimation` to propagate joint delta transforms onto parented ship mesh geometry
+  - [x] Add floating "N Animations Loaded — Use Timeline Below" badge in Viewport JSX
+  - [x] Confirmed TypeScript build clean (0 errors, 0 warnings)
+  - [x] Confirmed Rust parser crate builds clean (0 errors)
+- [ ] **Phase 4: Migration Workflow Validation (1.0 to 2.0)**
+  - [ ] Perform conversion on a HOD 1.0 ship (`shi_cain.hod`) to HOD 2.0
+  - [ ] Save and verify parsed structure parity
+- [ ] **Phase 5: Target Boxing Editor**
+  - [ ] Implement target box overlay in 3D viewport
+  - [ ] Implement UI sidebar in `TargetBoxing.tsx` to generate `.ship` targets
+- [ ] **Phase 6: Agents Info Documentation**
+  - [ ] Document all updates, changes, and structures inside `agents_info/` for handoff

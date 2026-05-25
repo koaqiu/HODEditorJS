@@ -1,0 +1,45 @@
+# TODO
+
+## Things to complete:
+
+- [x] Each joint should be toggeable
+- [x] Joints (general use)
+- [x] Quick visibility toggles
+- [x] Collision Meshes (automatic)
+- [x] Materials (with shader selection, format, using a main DIFF.TGA to load with the rest of texture files)
+- [x] Ship Meshes (multiple LODs per Mesh, assigning materials)
+- [x] Show something to let the user know a HOD is loading.
+- [x] Scrollable value edit fields (coordinates, values, etc.)
+- [x] Nodes should be draggable in the hierarchy to position under a parent node.
+- [x] Exporting and importing of Materials and 3d models
+- [x] Dockpaths loading and proper inspector (ter_orion and hgn_mothership are examples that use this)
+- [x] Root node auto created on New HOD creation
+- [x] Add Node Button (opens prompt to select type of node).
+- [x] Nodes such as these: Weapon, Turret, Hardpoint, Capture Point, Repair Point, Salvage Point. Should be shown as a single node while the inspector shows the sub nodes, since moving the subnodes it can break the HOD with accidental changes, let's reserve them as special nodes and leave normal joint nodes as separate where we can drag or add nodes into. There are templates in the old repos (DAEnerys and CFHodEd) that show how they are added.
+- [x] Engine Burns (mutiple flame points can be added)
+- [x] Engine Glows are also meshes (untextured), added only to Engine Nozzle nodes
+- [x] Engine Shape draggable to a joint node (also editable coordinates and rotation)
+- [x] Errors and warnings (missing basic data like a Root node, broken or incomplete weapon nodes/joints)
+- [x] make navlight nodes also draggable in the skeleton tree
+- [x] Fix HOD 1.0 Material Loading (testing with `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/shi_cain/shi_cain.hod` which the ui isn't showing any materials. Material loading is working well when loading HOD 2.0)
+- [x] tested ter_elysium.hod (2.0) loading and saving with the editor, the output file loads in game, but the ship is turned 90 degrees left and tilting a bit to the left about 30 degrees, maybe something to check out on (ter_elysium.hod (original) vs ter_elysium2.hod (created by editor, both located at `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_elysium/`).
+- [x] Make the node spheres slightly bigger for improve visuals, same with axis helpers. It is hard to see in bigger ships. Should increase in size more if highlighted
+- [x] Target Boxing editor (for adding to .ship files, DAEnerys had this, it is a separate tool that adds a viewable box that outputs the piece of code it represents, this isn't related to modifying the HOD at all)
+- [x] Fix shaders for HOD 2.0 materials. I notice now that we load materials for HOD 1.0 properly, the shaders work correctly, so the shaders might be setup for those old material setups and not for HOD 2.0 materials? Something to investigate deeper here.
+
+- [ ] Creation and Loading of Animations and proper inspector / editor (ter_orion and hgn_mothership are examples that use this) - Added Create Animation, Add Track, and Add Keyframe controls.
+- [ ] HOD 1.0 File animation proper loading (able to be later saved on to HOD 2.0 file), Animations aren't detected when loading them currently.
+- [ ] Full Test migrating a HOD 1.0 ship to HOD 2.0 with the editor and running it in game
+- [ ] GLOW textures are rendering wrong in the texture shaded mode, shader is interpreting wrong the colors
+
+## As a final test for HOD modifying:
+
+- [x] Open HOD 2.0, "save it", compare with original HOD 2.0 file loaded to see if it similar
+- [x] Open HOD 1.0, test how it loads and which nodes are incorrectly assigned or unknown to HOD 2.0 template (need a template for 2.0 based on all knowledge we gathered on nodes).
+- [x] Create a new HOD and save it, test it in game.
+
+
+For all of the above, have as reference:
+
+- CFHODed repo (for HOD 2.0 file viewer) "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/mod-tools/CFHodEd/" and analyse the .NET UI on what was used to edit everything.
+- DAEnerys repo (for .DAE file viewer and editor except for animations) "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/mod-tools/DAEnerys/"

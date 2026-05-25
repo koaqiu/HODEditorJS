@@ -1,0 +1,71 @@
+import React from "react";
+import { FolderOpen, Save, Hammer, FilePlus } from "lucide-react";
+
+interface ToolbarProps {
+  modelName: string;
+  onOpenClick: () => void;
+  onSaveClick: () => void;
+  onSaveAsClick?: () => void;
+  isSaving: boolean;
+  onNewClick?: () => void;
+}
+
+export const Toolbar: React.FC<ToolbarProps> = ({
+  modelName,
+  onOpenClick,
+  onSaveClick,
+  onSaveAsClick,
+  isSaving,
+  onNewClick,
+}) => {
+  return (
+    <header className="toolbar" style={{ padding: "8px 16px", minHeight: "48px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      {/* Brand Logo & Model Title */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <Hammer size={18} style={{ color: "var(--accent-cyan)", filter: "drop-shadow(var(--shadow-glow))" }} />
+        <span style={{ fontSize: "14px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-primary)" }}>
+          CFHodEd JS
+        </span>
+        <span style={{ height: "14px", width: "1px", background: "var(--border-color)" }} />
+        <span style={{ fontSize: "12px", color: "var(--accent-cyan)", fontWeight: "500", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "400px" }}>
+          {modelName || "NO HOD FILE LOADED"}
+        </span>
+      </div>
+
+      {/* Editor Controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        {/* File Operation Triggers */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          {onNewClick && (
+            <button onClick={onNewClick} style={{ height: "30px" }}>
+              <FilePlus size={14} style={{ color: "var(--accent-blue)" }} />
+              <span>New HOD</span>
+            </button>
+          )}
+          <button onClick={onOpenClick} style={{ height: "30px" }}>
+            <FolderOpen size={14} style={{ color: "var(--accent-cyan)" }} />
+            <span>Open HOD</span>
+          </button>
+           <button
+            onClick={onSaveClick}
+            disabled={isSaving}
+            style={{ height: "30px", opacity: isSaving ? 0.6 : 1 }}
+          >
+            <Save size={14} style={{ color: "var(--accent-success)" }} />
+            <span>{isSaving ? "Saving..." : "Save HOD"}</span>
+          </button>
+          {onSaveAsClick && (
+            <button
+              onClick={onSaveAsClick}
+              disabled={isSaving}
+              style={{ height: "30px", opacity: isSaving ? 0.6 : 1 }}
+            >
+              <Save size={14} style={{ color: "var(--accent-cyan)" }} />
+              <span>Save As...</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};
