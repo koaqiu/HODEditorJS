@@ -107,10 +107,12 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
 
     let mut indicator = 0u32;
     let mut indicator_bit = 0;
-    let mut indicator_pos = 0; // Index in `compressed` where the indicator word goes
+    let mut indicator_pos = 0;
     
-    // Write first indicator placeholder
     compressed.write_u32::<LittleEndian>(0).unwrap();
+
+    let mut head = vec![-1i32; 65536];
+    let mut prev = vec![-1i32; input_len];
 
     while input_idx < input_len {
         if indicator_bit == 31 {
@@ -126,13 +128,23 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
         let mut best_length = 0;
         let mut best_offset = 0;
 
-        let max_search = 65535; // Maximum offset distance
-        let search_start = input_idx.saturating_sub(max_search);
-
         if input_idx + 3 <= input_len {
-            for start in search_start..input_idx {
+            let hash = (((input[input_idx] as usize) << 10) 
+                ^ ((input[input_idx + 1] as usize) << 5) 
+                ^ (input[input_idx + 2] as usize)) & 0xFFFF;
+
+            let mut start = head[hash];
+            let mut chain_len = 0;
+
+            while start != -1 && chain_len < 64 {
+                let start_idx = start as usize;
+                let offset = input_idx - start_idx;
+                if offset > 65535 {
+                    break;
+                }
+
                 let mut len = 0;
-                while input_idx + len < input_len && input[start + len] == input[input_idx + len] {
+                while input_idx + len < input_len && input[start_idx + len] == input[input_idx + len] {
                     len += 1;
                     if len >= 258 {
                         break;
@@ -141,31 +153,86 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
 
                 if len >= 3 && len > best_length {
                     best_length = len;
-                    best_offset = input_idx - start;
+                    best_offset = offset;
                 }
+
+                start = prev[start_idx];
+                chain_len += 1;
             }
+
+            prev[input_idx] = head[hash];
+            head[hash] = input_idx as i32;
         }
 
         if best_length >= 3 {
-            // Encode as match copy
             indicator |= 1 << indicator_bit;
             indicator_bit += 1;
 
             if best_offset < 64 && best_length == 3 {
                 let byte = (best_offset << 2) as u8;
                 compressed.push(byte);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10) 
+                            ^ ((input[idx + 1] as usize) << 5) 
+                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
                 input_idx += best_length;
             } else if best_offset < 1024 && best_length >= 3 && best_length <= 18 {
                 let byte1 = (((best_length - 3) << 2) | ((best_offset & 3) << 6) | 0b10) as u8;
                 let byte2 = (best_offset >> 2) as u8;
                 compressed.push(byte1);
                 compressed.push(byte2);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10) 
+                            ^ ((input[idx + 1] as usize) << 5) 
+                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
                 input_idx += best_length;
             } else if best_offset < 16384 && best_length == 3 {
                 let byte1 = (((best_offset & 0x3F) << 2) | 0b01) as u8;
                 let byte2 = (best_offset >> 6) as u8;
                 compressed.push(byte1);
                 compressed.push(byte2);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10) 
+                            ^ ((input[idx + 1] as usize) << 5) 
+                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
+                input_idx += best_length;
+            } else if best_length > 34 {
+                let byte1 = ((((best_length - 3) & 0x1F) << 3) | 0b111) as u8;
+                let byte2 = ((((best_length - 3) >> 5) & 0x07) | ((best_offset & 31) << 3)) as u8;
+                let byte3 = ((best_offset >> 5) & 0xFF) as u8;
+                let byte4 = ((best_offset >> 13) & 0x07) as u8;
+                compressed.push(byte1);
+                compressed.push(byte2);
+                compressed.push(byte3);
+                compressed.push(byte4);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10) 
+                            ^ ((input[idx + 1] as usize) << 5) 
+                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
                 input_idx += best_length;
             } else {
                 let byte1 = (((best_length - 3) << 3) | 0b11) as u8;
@@ -174,10 +241,19 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 compressed.push(byte1);
                 compressed.push(byte2);
                 compressed.push(byte3);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10) 
+                            ^ ((input[idx + 1] as usize) << 5) 
+                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
                 input_idx += best_length;
             }
         } else {
-            // Encode as literal byte
             indicator_bit += 1;
             compressed.push(input[input_idx]);
             input_idx += 1;

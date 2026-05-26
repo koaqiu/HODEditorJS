@@ -31,6 +31,8 @@ pub struct HODVertex {
     pub uv: Option<Vector2>,
     pub tangent: Option<Vector3>,
     pub binormal: Option<Vector3>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skinning_data: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -712,6 +714,7 @@ impl HODModel {
                                                 uv: None,
                                                 tangent: None,
                                                 binormal: None,
+                                                skinning_data: None,
                                             });
                                             indices.push(current_vertex_idx as u16);
                                             current_vertex_idx += 1;
@@ -793,14 +796,15 @@ impl HODModel {
                                                         let vx = r_tris.read_f32::<LittleEndian>().map_err(|e| e.to_string())?;
                                                         let vy = r_tris.read_f32::<LittleEndian>().map_err(|e| e.to_string())?;
                                                         let vz = r_tris.read_f32::<LittleEndian>().map_err(|e| e.to_string())?;
-                                                        vertices.push(HODVertex {
-                                                            position: Vector3 { x: vx, y: vy, z: vz },
-                                                            normal: None,
-                                                            color: None,
-                                                            uv: None,
-                                                            tangent: None,
-                                                            binormal: None,
-                                                        });
+                                                         vertices.push(HODVertex {
+                                                             position: Vector3 { x: vx, y: vy, z: vz },
+                                                             normal: None,
+                                                             color: None,
+                                                             uv: None,
+                                                             tangent: None,
+                                                             binormal: None,
+                                                             skinning_data: None,
+                                                         });
                                                     }
 
                                                     if r_tris.position() + 4 <= child.data.len() as u64 {
@@ -1678,10 +1682,12 @@ fn read_vertex<R: Read>(vertex_reader: &mut R, vertex_mask: u32, version: u32, s
         binormal = Some(Vector3 { x: bx, y: by, z: bz });
     }
 
+    let mut skinning_data = None;
     if stride > bytes_read {
         let padding_needed = stride - bytes_read;
         let mut padding = vec![0u8; padding_needed as usize];
-        vertex_reader.read_exact(&mut padding).map_err(|e| e.to_string())?;
+        vertex_reader.read_exact(&mut padding).map_err(|e| format!("failed to read padding in read_vertex: {} (padding_needed={}, bytes_read={}, stride={})", e, padding_needed, bytes_read, stride))?;
+        skinning_data = Some(padding);
     }
 
     Ok(HODVertex {
@@ -1691,6 +1697,7 @@ fn read_vertex<R: Read>(vertex_reader: &mut R, vertex_mask: u32, version: u32, s
         uv,
         tangent,
         binormal,
+        skinning_data,
     })
 }
 
@@ -1773,8 +1780,9 @@ fn parse_basic_mesh(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HO
             let indice_count = reader.read_i32::<LittleEndian>().map_err(|e| e.to_string())? as usize;
             println!("    Part {} - verts={} indices={} mesh_pos={} face_pos={} mask=0x{:X} stride={} cumulative_vert={}", p_idx, vertex_count, indice_count, context.mesh_pool.position(), context.face_pool.position(), vertex_mask, vertex_stride, cumulative_vertex_offset);
 
-            for _ in 0..vertex_count {
-                let v = read_vertex(&mut context.mesh_pool, vertex_mask, chunk.version, vertex_stride, is_v2)?;
+            for v_idx in 0..vertex_count {
+                let v = read_vertex(&mut context.mesh_pool, vertex_mask, chunk.version, vertex_stride, is_v2)
+                    .map_err(|e| format!("failed at vertex {}/{}: {} (mesh_pool pos={}, total_len={})", v_idx, vertex_count, e, context.mesh_pool.position(), context.mesh_pool.get_ref().len()))?;
                 vertices.push(v);
             }
 
@@ -2165,17 +2173,539 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+fn write_vertex<W: Write>(writer: &mut W, vertex: &HODVertex, vertex_mask: u32, version: u32, stride: u32) -> Result<(), String> {
+    let mut bytes_written = 0;
+    if (vertex_mask & 0x1) != 0 {
+        writer.write_f32::<LittleEndian>(vertex.position.x).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(vertex.position.y).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(vertex.position.z).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(1.0).map_err(|e| e.to_string())?;
+        bytes_written += 16;
+    }
+    if (vertex_mask & 0x2) != 0 {
+        let n = vertex.normal.clone().unwrap_or(Vector3 { x: 0.0, y: 0.0, z: 0.0 });
+        writer.write_f32::<LittleEndian>(n.x).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(n.y).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(n.z).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(0.0).map_err(|e| e.to_string())?;
+        bytes_written += 16;
+    }
+    if (vertex_mask & 0x4) != 0 {
+        let col = vertex.color.unwrap_or(0xFFFFFFFF);
+        writer.write_u32::<LittleEndian>(col).map_err(|e| e.to_string())?;
+        bytes_written += 4;
+    }
+    if (vertex_mask & 0x8) != 0 {
+        let uv = vertex.uv.clone().unwrap_or(Vector2 { u: 0.0, v: 0.0 });
+        writer.write_f32::<LittleEndian>(uv.u).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(uv.v).map_err(|e| e.to_string())?;
+        bytes_written += 8;
+    }
+    if version == 1401 {
+        if (vertex_mask & 0x10) != 0 {
+            writer.write_f32::<LittleEndian>(0.0).map_err(|e| e.to_string())?;
+            writer.write_f32::<LittleEndian>(0.0).map_err(|e| e.to_string())?;
+            bytes_written += 8;
+        }
+        if (vertex_mask & 0x20) != 0 {
+            writer.write_f32::<LittleEndian>(0.0).map_err(|e| e.to_string())?;
+            writer.write_f32::<LittleEndian>(0.0).map_err(|e| e.to_string())?;
+            bytes_written += 8;
+        }
+    }
+    if (vertex_mask & 0x2000) != 0 {
+        let t = vertex.tangent.clone().unwrap_or(Vector3 { x: 0.0, y: 0.0, z: 0.0 });
+        writer.write_f32::<LittleEndian>(t.x).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(t.y).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(t.z).map_err(|e| e.to_string())?;
+        bytes_written += 12;
+    }
+    if (vertex_mask & 0x4000) != 0 {
+        let b = vertex.binormal.clone().unwrap_or(Vector3 { x: 0.0, y: 0.0, z: 0.0 });
+        writer.write_f32::<LittleEndian>(b.x).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(b.y).map_err(|e| e.to_string())?;
+        writer.write_f32::<LittleEndian>(b.z).map_err(|e| e.to_string())?;
+        bytes_written += 12;
+    }
+    if stride > bytes_written {
+        let padding_needed = stride - bytes_written;
+        if let Some(ref padding) = vertex.skinning_data {
+            if padding.len() == padding_needed as usize {
+                writer.write_all(padding).map_err(|e| e.to_string())?;
+            } else {
+                writer.write_all(&vec![0u8; padding_needed as usize]).map_err(|e| e.to_string())?;
+            }
+        } else {
+            writer.write_all(&vec![0u8; padding_needed as usize]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn update_mesh_chunks(
+    chunks: &mut [IffChunk],
+    updated_model: &HODModel,
+    is_v2: bool,
+    new_mesh_pool: &mut Vec<u8>,
+    new_face_pool: &mut Vec<u8>,
+    parent_name: &str,
+) -> Result<(), String> {
+    for chunk in chunks {
+        let mut current_parent_name = parent_name.to_string();
+
+        if chunk.id == "MULT" || chunk.id == "GOBG" {
+            let mut reader = Cursor::new(&chunk.data);
+            let total_len = chunk.data.len();
+            let mut len_bytes = [0u8; 4];
+            
+            let mut extracted_mesh_name = String::new();
+            let mut extracted_parent_name = String::new();
+            let mut current_pos = 0;
+
+            if reader.read_exact(&mut len_bytes).is_ok() {
+                let len = u32::from_le_bytes(len_bytes) as usize;
+                if len < total_len {
+                    let mut name_bytes = vec![0u8; len];
+                    if reader.read_exact(&mut name_bytes).is_ok() {
+                        extracted_mesh_name = String::from_utf8_lossy(&name_bytes).to_string();
+                        current_parent_name = extracted_mesh_name.clone();
+
+                        if reader.read_exact(&mut len_bytes).is_ok() {
+                            let parent_len = u32::from_le_bytes(len_bytes) as usize;
+                            let remaining = total_len.saturating_sub(reader.position() as usize);
+                            if parent_len <= remaining {
+                                let mut parent_bytes = vec![0u8; parent_len];
+                                if reader.read_exact(&mut parent_bytes).is_ok() {
+                                    extracted_parent_name = String::from_utf8_lossy(&parent_bytes).trim_matches('\0').to_string();
+                                }
+                            }
+                        }
+
+                        let _ = reader.read_u32::<LittleEndian>();
+                        current_pos = reader.position() as usize;
+                    }
+                }
+            }
+
+            if !extracted_mesh_name.is_empty() && current_pos < total_len {
+                let mut sub_chunks = Vec::new();
+                let mut sub_cursor = Cursor::new(&chunk.data[current_pos..]);
+                while sub_cursor.position() < sub_cursor.get_ref().len() as u64 {
+                    if let Ok(c) = IffChunk::read_chunk(&mut sub_cursor) {
+                        sub_chunks.push(c);
+                    } else {
+                        break;
+                    }
+                }
+
+                update_mesh_chunks(&mut sub_chunks, updated_model, is_v2, new_mesh_pool, new_face_pool, &extracted_mesh_name)?;
+
+                let mut new_mult_data = Vec::new();
+                write_len_string(&mut new_mult_data, &extracted_mesh_name)?;
+                write_len_string(&mut new_mult_data, &extracted_parent_name)?;
+                
+                let lod_count = sub_chunks.iter().filter(|c| c.id.trim() == "BMSH").count() as u32;
+                new_mult_data.write_u32::<LittleEndian>(lod_count).map_err(|e| e.to_string())?;
+
+                for child in &sub_chunks {
+                    child.write_chunk(&mut new_mult_data).map_err(|e| e.to_string())?;
+                }
+
+                chunk.data = new_mult_data;
+            }
+        } else if chunk.id == "GLOW" {
+            let mut extracted_glow_name = String::new();
+            if let Some(info_chunk) = chunk.children.iter().find(|c| c.id == "INFO") {
+                let mut r = Cursor::new(&info_chunk.data);
+                if let Ok(name) = read_len_string(&mut r) {
+                    extracted_glow_name = name;
+                }
+            }
+            current_parent_name = format!("GLOW:{}", extracted_glow_name);
+        } else if chunk.id == "ETSH" || chunk.id == "COLD" {
+            current_parent_name = chunk.id.clone();
+        } else if chunk.id.trim() == "BMSH" {
+            let mut reader = Cursor::new(&chunk.data);
+            let lod = reader.read_i32::<LittleEndian>().unwrap_or(0);
+            
+            let mesh_name = if parent_name == "MSHL" || parent_name == "Root" || parent_name.is_empty() {
+                "BMSH"
+            } else {
+                parent_name
+            };
+
+            let matched_mesh = if parent_name.starts_with("GLOW:") {
+                let glow_name = &parent_name[5..];
+                updated_model.engine_glows.iter().find(|g| g.name == glow_name).map(|g| &g.mesh)
+            } else {
+                updated_model.meshes.iter().find(|m| {
+                    m.lod == lod && (m.name == mesh_name || m.name == "BMSH" || mesh_name == "BMSH")
+                })
+            };
+
+            if let Some(mesh) = matched_mesh {
+                let mut new_bmsh_data = Vec::new();
+                new_bmsh_data.write_i32::<LittleEndian>(mesh.lod).map_err(|e| e.to_string())?;
+                new_bmsh_data.write_i32::<LittleEndian>(mesh.parts.len() as i32).map_err(|e| e.to_string())?;
+
+                for part in &mesh.parts {
+                    new_bmsh_data.write_i32::<LittleEndian>(part.material_index as i32).map_err(|e| e.to_string())?;
+                    new_bmsh_data.write_u32::<LittleEndian>(part.vertex_mask).map_err(|e| e.to_string())?;
+                    new_bmsh_data.write_i32::<LittleEndian>(part.vertices.len() as i32).map_err(|e| e.to_string())?;
+
+                    if is_v2 {
+                        let mut vertex_stride = 0;
+                        if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
+                        if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
+                        if (part.vertex_mask & 0x04) != 0 { vertex_stride += 4; }
+                        if (part.vertex_mask & 0x08) != 0 { vertex_stride += 8; }
+                        if chunk.version == 1401 {
+                            if (part.vertex_mask & 0x10) != 0 { vertex_stride += 8; }
+                            if (part.vertex_mask & 0x20) != 0 { vertex_stride += 8; }
+                        }
+                        if (part.vertex_mask & 0x2000) != 0 { vertex_stride += 12; }
+                        if (part.vertex_mask & 0x4000) != 0 { vertex_stride += 12; }
+                        if vertex_stride == 0 { vertex_stride = 1; }
+
+                        for vertex in &part.vertices {
+                            write_vertex(new_mesh_pool, vertex, part.vertex_mask, chunk.version, vertex_stride)?;
+                        }
+
+                        new_bmsh_data.write_i16::<LittleEndian>(-1).map_err(|e| e.to_string())?;
+                        new_bmsh_data.write_i32::<LittleEndian>(part.indices.len() as i32).map_err(|e| e.to_string())?;
+                        for &idx in &part.indices {
+                            new_face_pool.write_u16::<LittleEndian>(idx).map_err(|e| e.to_string())?;
+                        }
+                    } else {
+                        let mut vertex_stride = 0;
+                        if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
+                        if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
+                        if (part.vertex_mask & 0x04) != 0 { vertex_stride += 4; }
+                        if (part.vertex_mask & 0x08) != 0 { vertex_stride += 8; }
+                        if chunk.version == 1401 {
+                            if (part.vertex_mask & 0x10) != 0 { vertex_stride += 8; }
+                            if (part.vertex_mask & 0x20) != 0 { vertex_stride += 8; }
+                        }
+                        if (part.vertex_mask & 0x2000) != 0 { vertex_stride += 12; }
+                        if (part.vertex_mask & 0x4000) != 0 { vertex_stride += 12; }
+                        if vertex_stride == 0 { vertex_stride = 1; }
+
+                        for vertex in &part.vertices {
+                            write_vertex(&mut new_bmsh_data, vertex, part.vertex_mask, chunk.version, vertex_stride)?;
+                        }
+                        new_bmsh_data.write_i16::<LittleEndian>(1).map_err(|e| e.to_string())?;
+                        new_bmsh_data.write_u32::<LittleEndian>(514).map_err(|e| e.to_string())?;
+                        new_bmsh_data.write_i32::<LittleEndian>(part.indices.len() as i32).map_err(|e| e.to_string())?;
+                        for &idx in &part.indices {
+                            new_bmsh_data.write_u16::<LittleEndian>(idx).map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+                chunk.data = new_bmsh_data;
+            } else {
+                let matched_mesh_fallback = if parent_name.starts_with("GLOW:") {
+                    let glow_name = &parent_name[5..];
+                    updated_model.engine_glows.iter().find(|g| g.name == glow_name).map(|g| &g.mesh)
+                } else {
+                    updated_model.meshes.iter().find(|m| m.lod == lod)
+                };
+                if let Some(mesh) = matched_mesh_fallback {
+                    let mut new_bmsh_data = Vec::new();
+                    new_bmsh_data.write_i32::<LittleEndian>(mesh.lod).map_err(|e| e.to_string())?;
+                    new_bmsh_data.write_i32::<LittleEndian>(mesh.parts.len() as i32).map_err(|e| e.to_string())?;
+
+                    for part in &mesh.parts {
+                        new_bmsh_data.write_i32::<LittleEndian>(part.material_index as i32).map_err(|e| e.to_string())?;
+                        new_bmsh_data.write_u32::<LittleEndian>(part.vertex_mask).map_err(|e| e.to_string())?;
+                        new_bmsh_data.write_i32::<LittleEndian>(part.vertices.len() as i32).map_err(|e| e.to_string())?;
+
+                        if is_v2 {
+                            let mut vertex_stride = 0;
+                            if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
+                            if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
+                            if (part.vertex_mask & 0x04) != 0 { vertex_stride += 4; }
+                            if (part.vertex_mask & 0x08) != 0 { vertex_stride += 8; }
+                            if chunk.version == 1401 {
+                                if (part.vertex_mask & 0x10) != 0 { vertex_stride += 8; }
+                                if (part.vertex_mask & 0x20) != 0 { vertex_stride += 8; }
+                            }
+                            if (part.vertex_mask & 0x2000) != 0 { vertex_stride += 12; }
+                            if (part.vertex_mask & 0x4000) != 0 { vertex_stride += 12; }
+                            if vertex_stride == 0 { vertex_stride = 1; }
+
+                            for vertex in &part.vertices {
+                                write_vertex(new_mesh_pool, vertex, part.vertex_mask, chunk.version, vertex_stride)?;
+                            }
+                            new_bmsh_data.write_i16::<LittleEndian>(-1).map_err(|e| e.to_string())?;
+                            new_bmsh_data.write_i32::<LittleEndian>(part.indices.len() as i32).map_err(|e| e.to_string())?;
+                            for &idx in &part.indices {
+                                new_face_pool.write_u16::<LittleEndian>(idx).map_err(|e| e.to_string())?;
+                            }
+                        } else {
+                            let mut vertex_stride = 0;
+                            if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
+                            if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
+                            if (part.vertex_mask & 0x04) != 0 { vertex_stride += 4; }
+                            if (part.vertex_mask & 0x08) != 0 { vertex_stride += 8; }
+                            if chunk.version == 1401 {
+                                if (part.vertex_mask & 0x10) != 0 { vertex_stride += 8; }
+                                if (part.vertex_mask & 0x20) != 0 { vertex_stride += 8; }
+                            }
+                            if (part.vertex_mask & 0x2000) != 0 { vertex_stride += 12; }
+                            if (part.vertex_mask & 0x4000) != 0 { vertex_stride += 12; }
+                            if vertex_stride == 0 { vertex_stride = 1; }
+
+                            for vertex in &part.vertices {
+                                write_vertex(&mut new_bmsh_data, vertex, part.vertex_mask, chunk.version, vertex_stride)?;
+                            }
+                            new_bmsh_data.write_i16::<LittleEndian>(1).map_err(|e| e.to_string())?;
+                            new_bmsh_data.write_u32::<LittleEndian>(514).map_err(|e| e.to_string())?;
+                            new_bmsh_data.write_i32::<LittleEndian>(part.indices.len() as i32).map_err(|e| e.to_string())?;
+                            for &idx in &part.indices {
+                                new_bmsh_data.write_u16::<LittleEndian>(idx).map_err(|e| e.to_string())?;
+                            }
+                        }
+                    }
+                    chunk.data = new_bmsh_data;
+                }
+            }
+        }
+
+        if !chunk.children.is_empty() {
+            update_mesh_chunks(&mut chunk.children, updated_model, is_v2, new_mesh_pool, new_face_pool, &current_parent_name)?;
+        }
+    }
+    Ok(())
+}
+
+fn sanitize_prim_group_counts(chunks: &mut [IffChunk]) -> Result<(), String> {
+    for chunk in chunks {
+        if chunk.id == "MULT" || chunk.id == "GOBG" {
+            let mut reader = Cursor::new(&chunk.data);
+            let total_len = chunk.data.len();
+            let mut len_bytes = [0u8; 4];
+            let mut current_pos = 0;
+
+            if reader.read_exact(&mut len_bytes).is_ok() {
+                let len = u32::from_le_bytes(len_bytes) as usize;
+                if len < total_len {
+                    let mut name_bytes = vec![0u8; len];
+                    if reader.read_exact(&mut name_bytes).is_ok() {
+                        if reader.read_exact(&mut len_bytes).is_ok() {
+                            let parent_len = u32::from_le_bytes(len_bytes) as usize;
+                            let remaining = total_len.saturating_sub(reader.position() as usize);
+                            if parent_len <= remaining {
+                                let mut parent_bytes = vec![0u8; parent_len];
+                                if reader.read_exact(&mut parent_bytes).is_ok() {
+                                    let _ = reader.read_u32::<LittleEndian>();
+                                    current_pos = reader.position() as usize;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if current_pos > 0 && current_pos < total_len {
+                let mut sub_chunks = Vec::new();
+                let mut sub_cursor = Cursor::new(&chunk.data[current_pos..]);
+                while sub_cursor.position() < sub_cursor.get_ref().len() as u64 {
+                    if let Ok(c) = IffChunk::read_chunk(&mut sub_cursor) {
+                        sub_chunks.push(c);
+                    } else {
+                        break;
+                    }
+                }
+
+                sanitize_prim_group_counts(&mut sub_chunks)?;
+
+                let mut new_mult_data = chunk.data[..current_pos].to_vec();
+                for child in &sub_chunks {
+                    child.write_chunk(&mut new_mult_data).map_err(|e| e.to_string())?;
+                }
+                chunk.data = new_mult_data;
+            }
+        } else if chunk.id.trim() == "BMSH" {
+            let mut data = chunk.data.clone();
+            if data.len() >= 8 {
+                let mut reader = Cursor::new(&data);
+                let _lod = reader.read_i32::<LittleEndian>().unwrap_or(0);
+                let part_count = reader.read_i32::<LittleEndian>().unwrap_or(0) as usize;
+                for p_idx in 0..part_count {
+                    let offset = 20 + p_idx * 18;
+                    if offset + 2 <= data.len() {
+                        let val = u16::from_le_bytes([data[offset], data[offset + 1]]);
+                        if val == 1 {
+                            data[offset] = 0xFF;
+                            data[offset + 1] = 0xFF;
+                        }
+                    }
+                }
+            }
+            chunk.data = data;
+        }
+
+        if !chunk.children.is_empty() {
+            sanitize_prim_group_counts(&mut chunk.children)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec<u8>, String> {
-    let mut cursor = Cursor::new(original_bytes);
     let mut chunks = Vec::new();
-    while cursor.position() < original_bytes.len() as u64 {
-        match IffChunk::read_chunk(&mut cursor) {
-            Ok(chunk) => chunks.push(chunk),
-            Err(e) => return Err(format!("IFF boundary read error: {}", e)),
+    if original_bytes.is_empty() {
+        let mut vers_data = Vec::new();
+        vers_data.write_u32::<BigEndian>(updated_model.version).map_err(|e| e.to_string())?;
+        chunks.push(IffChunk {
+            id: "VERS".to_string(),
+            chunk_type: crate::iff::ChunkType::Normal,
+            version: 0,
+            data: vers_data,
+            children: Vec::new(),
+        });
+
+        chunks.push(IffChunk {
+            id: "NAME".to_string(),
+            chunk_type: crate::iff::ChunkType::Normal,
+            version: 0,
+            data: updated_model.name.as_bytes().to_vec(),
+            children: Vec::new(),
+        });
+
+        chunks.push(IffChunk {
+            id: "POOL".to_string(),
+            chunk_type: crate::iff::ChunkType::Default,
+            version: 0,
+            data: Vec::new(),
+            children: Vec::new(),
+        });
+
+        let mut hvmd_children = Vec::new();
+        for mesh in &updated_model.meshes {
+            let mut mult_data = Vec::new();
+            write_len_string(&mut mult_data, &mesh.name)?;
+            write_len_string(&mut mult_data, &mesh.parent_name)?;
+            mult_data.write_u32::<LittleEndian>(1).map_err(|e| e.to_string())?;
+
+            let bmsh_chunk = IffChunk {
+                id: "BMSH".to_string(),
+                chunk_type: crate::iff::ChunkType::Normal,
+                version: 0,
+                data: Vec::new(),
+                children: Vec::new(),
+            };
+
+            hvmd_children.push(IffChunk {
+                id: "MULT".to_string(),
+                chunk_type: crate::iff::ChunkType::Form,
+                version: 0,
+                data: mult_data,
+                children: vec![bmsh_chunk],
+            });
+        }
+
+        chunks.push(IffChunk {
+            id: "HVMD".to_string(),
+            chunk_type: crate::iff::ChunkType::Form,
+            version: 0,
+            data: Vec::new(),
+            children: hvmd_children,
+        });
+
+        chunks.push(IffChunk {
+            id: "DTRM".to_string(),
+            chunk_type: crate::iff::ChunkType::Form,
+            version: 0,
+            data: Vec::new(),
+            children: Vec::new(),
+        });
+    } else {
+        let mut cursor = Cursor::new(original_bytes);
+        while cursor.position() < original_bytes.len() as u64 {
+            match IffChunk::read_chunk(&mut cursor) {
+                Ok(chunk) => chunks.push(chunk),
+                Err(e) => return Err(format!("IFF boundary read error: {}", e)),
+            }
         }
     }
 
-    // Convert GOBG to MULT to prevent HWRM game crashes
+    let is_v2 = chunks.iter().any(|c| c.id == "POOL") || updated_model.version >= 0x200;
+
+    let mut original_comp_tex = Vec::new();
+    let mut original_decomp_tex_len = 0;
+    let mut original_comp_mesh = Vec::new();
+    let mut original_decomp_mesh_len = 0;
+    let mut original_comp_face = Vec::new();
+    let mut original_decomp_face_len = 0;
+
+    let mut original_texture_pool = Vec::new();
+    let mut original_mesh_pool = Vec::new();
+    let mut original_face_pool = Vec::new();
+
+    if is_v2 {
+        for chunk in &chunks {
+            if chunk.id == "POOL" {
+                if !chunk.data.is_empty() {
+                    let mut pool_cursor = Cursor::new(&chunk.data);
+                    if let Ok(_pool_type) = pool_cursor.read_u32::<LittleEndian>() {
+                        if let Ok(comp_tex_len) = pool_cursor.read_u32::<LittleEndian>() {
+                            if let Ok(decomp_tex_len) = pool_cursor.read_u32::<LittleEndian>() {
+                                let mut comp_tex = vec![0u8; comp_tex_len as usize];
+                                if pool_cursor.read_exact(&mut comp_tex).is_ok() {
+                                    original_comp_tex = comp_tex.clone();
+                                    original_decomp_tex_len = decomp_tex_len;
+                                    if let Ok(decomp_tex) = xpress::decompress(&comp_tex, decomp_tex_len as usize) {
+                                        original_texture_pool = decomp_tex;
+                                    }
+                                }
+                                if let Ok(comp_mesh_len) = pool_cursor.read_u32::<LittleEndian>() {
+                                    if let Ok(decomp_mesh_len) = pool_cursor.read_u32::<LittleEndian>() {
+                                        let mut comp_mesh = vec![0u8; comp_mesh_len as usize];
+                                        if pool_cursor.read_exact(&mut comp_mesh).is_ok() {
+                                            original_comp_mesh = comp_mesh.clone();
+                                            original_decomp_mesh_len = decomp_mesh_len;
+                                            if let Ok(decomp_mesh) = xpress::decompress(&comp_mesh, decomp_mesh_len as usize) {
+                                                original_mesh_pool = decomp_mesh;
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Ok(comp_face_len) = pool_cursor.read_u32::<LittleEndian>() {
+                                    if let Ok(decomp_face_len) = pool_cursor.read_u32::<LittleEndian>() {
+                                        let mut comp_face = vec![0u8; comp_face_len as usize];
+                                        if pool_cursor.read_exact(&mut comp_face).is_ok() {
+                                            original_comp_face = comp_face.clone();
+                                            original_decomp_face_len = decomp_face_len;
+                                            if let Ok(decomp_face) = xpress::decompress(&comp_face, decomp_face_len as usize) {
+                                                original_face_pool = decomp_face;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    let mut meshes_modified = true;
+    if !original_bytes.is_empty() {
+        if let Ok(orig) = HODModel::parse(original_bytes) {
+            let orig_total_verts: usize = orig.meshes.iter().map(|m| m.parts.iter().map(|p| p.vertices.len()).sum::<usize>()).sum();
+            let updated_total_verts: usize = updated_model.meshes.iter().map(|m| m.parts.iter().map(|p| p.vertices.len()).sum::<usize>()).sum();
+            if orig_total_verts == updated_total_verts {
+                meshes_modified = false;
+            }
+        }
+    }
+
+    let mut new_mesh_pool = Vec::new();
+    let mut new_face_pool = Vec::new();
+
     for chunk in &mut chunks {
         if chunk.id == "HVMD" {
             for sub_chunk in &mut chunk.children {
@@ -2186,7 +2716,50 @@ pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec
         }
     }
 
-    let is_v2 = chunks.iter().any(|c| c.id == "POOL") || updated_model.version >= 0x200;
+    if meshes_modified {
+        update_mesh_chunks(&mut chunks, updated_model, is_v2, &mut new_mesh_pool, &mut new_face_pool, "")?;
+    } else {
+        new_mesh_pool = original_mesh_pool;
+        new_face_pool = original_face_pool;
+        sanitize_prim_group_counts(&mut chunks)?;
+    }
+
+    if is_v2 {
+        let mut pool_data = Vec::new();
+        pool_data.write_u32::<LittleEndian>(0).map_err(|e| e.to_string())?;
+
+        pool_data.write_u32::<LittleEndian>(original_comp_tex.len() as u32).map_err(|e| e.to_string())?;
+        pool_data.write_u32::<LittleEndian>(original_decomp_tex_len).map_err(|e| e.to_string())?;
+        pool_data.extend_from_slice(&original_comp_tex);
+
+        if meshes_modified {
+            let comp_mesh = xpress::compress(&new_mesh_pool);
+            let comp_face = xpress::compress(&new_face_pool);
+
+            pool_data.write_u32::<LittleEndian>(comp_mesh.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.write_u32::<LittleEndian>(new_mesh_pool.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.extend_from_slice(&comp_mesh);
+
+            pool_data.write_u32::<LittleEndian>(comp_face.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.write_u32::<LittleEndian>(new_face_pool.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.extend_from_slice(&comp_face);
+        } else {
+            pool_data.write_u32::<LittleEndian>(original_comp_mesh.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.write_u32::<LittleEndian>(original_decomp_mesh_len).map_err(|e| e.to_string())?;
+            pool_data.extend_from_slice(&original_comp_mesh);
+
+            pool_data.write_u32::<LittleEndian>(original_comp_face.len() as u32).map_err(|e| e.to_string())?;
+            pool_data.write_u32::<LittleEndian>(original_decomp_face_len).map_err(|e| e.to_string())?;
+            pool_data.extend_from_slice(&original_comp_face);
+        }
+
+        for chunk in &mut chunks {
+            if chunk.id == "POOL" {
+                chunk.data = pool_data;
+                break;
+            }
+        }
+    }
 
     let mut hier_data = Vec::new();
     if is_v2 {
@@ -2354,130 +2927,214 @@ pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec
             }
 
             let mut new_children = Vec::new();
-            let hier_chunk = IffChunk {
-                id: "HIER".to_string(),
-                chunk_type: crate::iff::ChunkType::Form,
-                version: 0,
-                data: hier_data.clone(),
-                children: Vec::new(),
-            };
-            new_children.push(hier_chunk);
+            let mut mrks_written = false;
+            let mut navl_written = false;
+            let mut burn_written = false;
+            let mut dock_written = false;
 
             for child in &chunk.children {
-                if child.id != "HIER" && child.id != "MRKR" && child.id != "MRKS"
-                    && child.id != "NAVL" && child.id != "BURN" && child.id != "DOCK" {
-                    new_children.push(child.clone());
+                match child.id.as_str() {
+                    "HIER" => {
+                        new_children.push(IffChunk {
+                            id: "HIER".to_string(),
+                            chunk_type: crate::iff::ChunkType::Form,
+                            version: 0,
+                            data: hier_data.clone(),
+                            children: Vec::new(),
+                        });
+                    }
+                    "MRKS" | "MRKR" => {
+                        if is_v2 {
+                            if !mrks_written {
+                                new_children.push(IffChunk {
+                                    id: "MRKS".to_string(),
+                                    chunk_type: crate::iff::ChunkType::Default,
+                                    version: 0,
+                                    data: mrkr_data.clone(),
+                                    children: Vec::new(),
+                                });
+                                mrks_written = true;
+                            }
+                        } else {
+                            if !mrks_written {
+                                for marker in &updated_model.markers {
+                                    let head_data = serialize_single_marker(marker, false)?;
+                                    let head_chunk = IffChunk {
+                                        id: "HEAD".to_string(),
+                                        chunk_type: crate::iff::ChunkType::Normal,
+                                        version: 1,
+                                        data: head_data,
+                                        children: Vec::new(),
+                                    };
+
+                                    let mut anim_children = Vec::new();
+                                    if let Some(default_anim) = updated_model.animations.iter().find(|a| a.name == "DefaultAnimation") {
+                                        if let Some(track) = default_anim.tracks.iter().find(|t| t.joint_name.eq_ignore_ascii_case(&marker.name)) {
+                                            let mut has_pos = false;
+                                            let mut has_rot = false;
+
+                                            for kf in &track.keyframes {
+                                                if kf.position.is_some() { has_pos = true; }
+                                                if kf.rotation.is_some() { has_rot = true; }
+                                            }
+
+                                            if has_pos {
+                                                let mut tx_vals = Vec::new();
+                                                let mut ty_vals = Vec::new();
+                                                let mut tz_vals = Vec::new();
+                                                for kf in &track.keyframes {
+                                                    if let Some(ref pos) = kf.position {
+                                                        tx_vals.push((kf.time, pos.x as f64));
+                                                        ty_vals.push((kf.time, pos.y as f64));
+                                                        tz_vals.push((kf.time, pos.z as f64));
+                                                    }
+                                                }
+                                                anim_children.push(serialize_anim_curve("translateX", tx_vals)?);
+                                                anim_children.push(serialize_anim_curve("translateY", ty_vals)?);
+                                                anim_children.push(serialize_anim_curve("translateZ", tz_vals)?);
+                                            }
+
+                                            if has_rot {
+                                                let mut rx_vals = Vec::new();
+                                                let mut ry_vals = Vec::new();
+                                                let mut rz_vals = Vec::new();
+                                                for kf in &track.keyframes {
+                                                    let euler = if let Some(ref euler) = kf.rotation_euler {
+                                                        euler.clone()
+                                                    } else if let Some(ref rot) = kf.rotation {
+                                                        quaternion_to_euler(rot)
+                                                    } else {
+                                                        Vector3 { x: 0.0, y: 0.0, z: 0.0 }
+                                                    };
+                                                    rx_vals.push((kf.time, euler.x as f64));
+                                                    ry_vals.push((kf.time, euler.y as f64));
+                                                    rz_vals.push((kf.time, euler.z as f64));
+                                                }
+                                                anim_children.push(serialize_anim_curve("rotateX", rx_vals)?);
+                                                anim_children.push(serialize_anim_curve("rotateY", ry_vals)?);
+                                                anim_children.push(serialize_anim_curve("rotateZ", rz_vals)?);
+                                            }
+                                        }
+                                    }
+
+                                    let keyf_chunk = IffChunk {
+                                        id: "KEYF".to_string(),
+                                        chunk_type: crate::iff::ChunkType::Form,
+                                        version: 0,
+                                        data: Vec::new(),
+                                        children: anim_children,
+                                    };
+                                    new_children.push(IffChunk {
+                                        id: "MRKR".to_string(),
+                                        chunk_type: crate::iff::ChunkType::Form,
+                                        version: 0,
+                                        data: Vec::new(),
+                                        children: vec![head_chunk, keyf_chunk],
+                                    });
+                                }
+                                mrks_written = true;
+                            }
+                        }
+                    }
+                    "NAVL" => {
+                        if !navl_data.is_empty() && !navl_written {
+                            new_children.push(IffChunk {
+                                id: "NAVL".to_string(),
+                                chunk_type: crate::iff::ChunkType::Normal,
+                                version: 3,
+                                data: navl_data.clone(),
+                                children: Vec::new(),
+                            });
+                            navl_written = true;
+                        }
+                    }
+                    "BURN" => {
+                        if !burn_written {
+                            for burn in &updated_model.engine_burns {
+                                let mut data = Vec::new();
+                                write_len_string(&mut data, &burn.name)?;
+                                write_len_string(&mut data, &burn.parent_name)?;
+                                data.write_i32::<LittleEndian>(burn.num_divisions).map_err(|e| e.to_string())?;
+                                data.write_i32::<LittleEndian>(burn.num_flames).map_err(|e| e.to_string())?;
+                                for v in &burn.vertices {
+                                    data.write_f32::<LittleEndian>(v.x).map_err(|e| e.to_string())?;
+                                    data.write_f32::<LittleEndian>(v.y).map_err(|e| e.to_string())?;
+                                    data.write_f32::<LittleEndian>(v.z).map_err(|e| e.to_string())?;
+                                }
+                                new_children.push(IffChunk {
+                                    id: "BURN".to_string(),
+                                    chunk_type: crate::iff::ChunkType::Default,
+                                    version: 0,
+                                    data,
+                                    children: Vec::new(),
+                                });
+                            }
+                            burn_written = true;
+                        }
+                    }
+                    "DOCK" => {
+                        if !dock_data.is_empty() && !dock_written {
+                            new_children.push(IffChunk {
+                                id: "DOCK".to_string(),
+                                chunk_type: crate::iff::ChunkType::Default,
+                                version: 0,
+                                data: dock_data.clone(),
+                                children: Vec::new(),
+                            });
+                            dock_written = true;
+                        }
+                    }
+                    _ => {
+                        new_children.push(child.clone());
+                    }
                 }
             }
 
-            if is_v2 {
-                let mrks_chunk = IffChunk {
+            if is_v2 && !mrks_written {
+                new_children.push(IffChunk {
                     id: "MRKS".to_string(),
                     chunk_type: crate::iff::ChunkType::Default,
                     version: 0,
                     data: mrkr_data.clone(),
                     children: Vec::new(),
-                };
-                new_children.push(mrks_chunk);
-            } else {
-                for marker in &updated_model.markers {
-                    let head_data = serialize_single_marker(marker, false)?;
-                    let head_chunk = IffChunk {
-                        id: "HEAD".to_string(),
-                        chunk_type: crate::iff::ChunkType::Normal,
-                        version: 1,
-                        data: head_data,
-                        children: Vec::new(),
-                    };
-
-                    let mut anim_children = Vec::new();
-                    if let Some(default_anim) = updated_model.animations.iter().find(|a| a.name == "DefaultAnimation") {
-                        if let Some(track) = default_anim.tracks.iter().find(|t| t.joint_name.eq_ignore_ascii_case(&marker.name)) {
-                            let mut has_pos = false;
-                            let mut has_rot = false;
-
-                            for kf in &track.keyframes {
-                                if kf.position.is_some() { has_pos = true; }
-                                if kf.rotation.is_some() { has_rot = true; }
-                            }
-
-                            if has_pos {
-                                let mut tx_vals = Vec::new();
-                                let mut ty_vals = Vec::new();
-                                let mut tz_vals = Vec::new();
-                                for kf in &track.keyframes {
-                                    if let Some(ref pos) = kf.position {
-                                        tx_vals.push((kf.time, pos.x as f64));
-                                        ty_vals.push((kf.time, pos.y as f64));
-                                        tz_vals.push((kf.time, pos.z as f64));
-                                    }
-                                }
-                                anim_children.push(serialize_anim_curve("translateX", tx_vals)?);
-                                anim_children.push(serialize_anim_curve("translateY", ty_vals)?);
-                                anim_children.push(serialize_anim_curve("translateZ", tz_vals)?);
-                            }
-
-                            if has_rot {
-                                let mut rx_vals = Vec::new();
-                                let mut ry_vals = Vec::new();
-                                let mut rz_vals = Vec::new();
-                                for kf in &track.keyframes {
-                                    let euler = if let Some(ref euler) = kf.rotation_euler {
-                                        euler.clone()
-                                    } else if let Some(ref rot) = kf.rotation {
-                                        quaternion_to_euler(rot)
-                                    } else {
-                                        Vector3 { x: 0.0, y: 0.0, z: 0.0 }
-                                    };
-                                    rx_vals.push((kf.time, euler.x as f64));
-                                    ry_vals.push((kf.time, euler.y as f64));
-                                    rz_vals.push((kf.time, euler.z as f64));
-                                }
-                                anim_children.push(serialize_anim_curve("rotateX", rx_vals)?);
-                                anim_children.push(serialize_anim_curve("rotateY", ry_vals)?);
-                                anim_children.push(serialize_anim_curve("rotateZ", rz_vals)?);
-                            }
-                        }
-                    }
-
-                    let keyf_chunk = IffChunk {
-                        id: "KEYF".to_string(),
-                        chunk_type: crate::iff::ChunkType::Form,
-                        version: 0,
-                        data: Vec::new(),
-                        children: anim_children,
-                    };
-                    let mrkr_chunk = IffChunk {
-                        id: "MRKR".to_string(),
-                        chunk_type: crate::iff::ChunkType::Form,
-                        version: 0,
-                        data: Vec::new(),
-                        children: vec![head_chunk, keyf_chunk],
-                    };
-                    new_children.push(mrkr_chunk);
-                }
+                });
             }
-
-            if !navl_data.is_empty() {
+            if !navl_data.is_empty() && !navl_written {
                 new_children.push(IffChunk {
                     id: "NAVL".to_string(),
                     chunk_type: crate::iff::ChunkType::Normal,
                     version: 3,
-                    data: navl_data,
+                    data: navl_data.clone(),
                     children: Vec::new(),
                 });
             }
-
-            for burn_chunk in burn_chunks {
-                new_children.push(burn_chunk);
+            if !burn_written {
+                for burn in &updated_model.engine_burns {
+                    let mut data = Vec::new();
+                    write_len_string(&mut data, &burn.name)?;
+                    write_len_string(&mut data, &burn.parent_name)?;
+                    data.write_i32::<LittleEndian>(burn.num_divisions).map_err(|e| e.to_string())?;
+                    data.write_i32::<LittleEndian>(burn.num_flames).map_err(|e| e.to_string())?;
+                    for v in &burn.vertices {
+                        data.write_f32::<LittleEndian>(v.x).map_err(|e| e.to_string())?;
+                        data.write_f32::<LittleEndian>(v.y).map_err(|e| e.to_string())?;
+                        data.write_f32::<LittleEndian>(v.z).map_err(|e| e.to_string())?;
+                    }
+                    new_children.push(IffChunk {
+                        id: "BURN".to_string(),
+                        chunk_type: crate::iff::ChunkType::Default,
+                        version: 0,
+                        data,
+                        children: Vec::new(),
+                    });
+                }
             }
-
-            if !dock_data.is_empty() {
+            if !dock_data.is_empty() && !dock_written {
                 new_children.push(IffChunk {
                     id: "DOCK".to_string(),
                     chunk_type: crate::iff::ChunkType::Default,
                     version: 0,
-                    data: dock_data,
+                    data: dock_data.clone(),
                     children: Vec::new(),
                 });
             }
