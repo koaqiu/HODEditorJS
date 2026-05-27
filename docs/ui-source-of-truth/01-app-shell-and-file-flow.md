@@ -45,9 +45,9 @@ Save uses the current file path when available. Save As prompts for a destinatio
 
 Agents must not add save side effects to lower-level components unless routed through existing app callbacks.
 
-## Auto Collision Creation
+## Collision Hull Handling
 
-When loading v2 models without collision hull data, `App.tsx` may auto-create default collision bounds from ship geometry. This is part of current load-time UI behavior.
+`App.tsx` does not auto-create collision hulls on load. If a model has no `COLD` data, it remains absent until the user explicitly creates or edits collision data through the UI.
 
 ## Viewport Shell Controls
 

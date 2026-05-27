@@ -115,7 +115,7 @@ Creating multi-joint setups is simplified using template presets. Instead of han
 To bypass annoying errors or manual hex-editing, the editor features built-in self-cleaning pipelines:
 
 * **Astronomic Coordinate Outlier Sanitizer**: Skinned mesh vertex streams often contain dummy bone anchors with extreme coordinate values (uninitialized floats between $10^{11}$ and $10^{38}$ units). These outlier coordinate bounds blew up Three.js camera auto-focus algorithms, forcing the camera to zoom billions of units out and rendering the ship as an invisible, sub-pixel dot. On import, coordinates exceeding a magnitude of `10,000.0` units are safely sanitized to `0.0`.
-* **Automatic Collision Hull Generation**: If a loaded HOD file lacks standard `COLD` sub-chunks, the editor calculates the exact geometry dimensions and automatically generates bounding box and bounding sphere collision bounds to prevent game crashes.
+* **Collision Hull Editing**: Existing `COLD` collision hulls are displayed and edited explicitly in the UI. If a loaded HOD file lacks `COLD` data, the editor leaves it absent on load unless the user creates collision data manually.
 * **Circular Link Set Guards**: Scans parent relationships during tree parsing. If a circular parent-child joint reference is identified, parsing terminates recursively to prevent browser stack overflow crashes.
 
 ---

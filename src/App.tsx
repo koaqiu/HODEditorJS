@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Viewport, HODModel, Vector3D, HODCollisionMesh, HODMesh } from "./components/Viewport";
+import { Viewport, HODModel, Vector3D } from "./components/Viewport";
 import { Toolbar } from "./components/Toolbar";
 import { HierarchyTree } from "./components/HierarchyTree";
 import { Inspector } from "./components/Inspector";
@@ -172,78 +172,6 @@ function App() {
     }
   };
 
-  // Helper to auto-generate default collision mesh (COLD) for v2 if none exist
-  const autoCreateCollisionMesh = (loadedModel: HODModel): HODModel => {
-    if (!loadedModel.is_v2 || (loadedModel.collision_meshes && loadedModel.collision_meshes.length > 0)) {
-      return loadedModel;
-    }
-
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    let hasVertices = false;
-
-    loadedModel.meshes.forEach((mesh) => {
-      mesh.parts.forEach((part) => {
-        part.vertices.forEach((v) => {
-          if (v.position && Number.isFinite(v.position.x)) {
-            minX = Math.min(minX, v.position.x);
-            minY = Math.min(minY, v.position.y);
-            minZ = Math.min(minZ, v.position.z);
-            maxX = Math.max(maxX, v.position.x);
-            maxY = Math.max(maxY, v.position.y);
-            maxZ = Math.max(maxZ, v.position.z);
-            hasVertices = true;
-          }
-        });
-      });
-    });
-
-    if (!hasVertices) {
-      minX = -10; minY = -10; minZ = -10;
-      maxX = 10; maxY = 10; maxZ = 10;
-    }
-
-    const center = {
-      x: (minX + maxX) / 2,
-      y: (minY + maxY) / 2,
-      z: (minZ + maxZ) / 2,
-    };
-
-    const min_extents = { x: minX, y: minY, z: minZ };
-    const max_extents = { x: maxX, y: maxY, z: maxZ };
-
-    const dx = maxX - minX;
-    const dy = maxY - minY;
-    const dz = maxZ - minZ;
-    const radius = Math.sqrt(dx * dx + dy * dy + dz * dz) / 2;
-
-    const defaultMesh: HODMesh = {
-      name: "CollisionGeometry",
-      parent_name: "Root",
-      lod: 0,
-      parts: []
-    };
-
-    const defaultCollision: HODCollisionMesh = {
-      name: loadedModel.joints[0]?.name || "Root",
-      min_extents,
-      max_extents,
-      center,
-      radius,
-      mesh: defaultMesh,
-    };
-
-    invoke("log_event", {
-      level: "INFO",
-      message: `Auto-created default COLD collision mesh bounds. Center: [${center.x.toFixed(1)}, ${center.y.toFixed(1)}, ${center.z.toFixed(1)}], Radius: ${radius.toFixed(1)}`,
-    }).catch(console.error);
-
-    return {
-      ...loadedModel,
-      collision_meshes: [defaultCollision],
-    };
-  };
-
   const resetUIState = () => {
     setModel(null);
     setSelectedNode(null);
@@ -373,7 +301,6 @@ function App() {
         };
 
         const sanitizedModel = sanitizeNavLightChildren(processedModel);
-        // const finalizedModel = autoCreateCollisionMesh(sanitizedModel);
         setModel(sanitizedModel);
         setIsDirty(false);
         setSelectedNode(null);

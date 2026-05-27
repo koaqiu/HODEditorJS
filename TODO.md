@@ -28,15 +28,18 @@
 - [x] Fix shaders for HOD 2.0 materials. I notice now that we load materials for HOD 1.0 properly, the shaders work correctly, so the shaders might be setup for those old material setups and not for HOD 2.0 materials? Something to investigate deeper here.
 - [x] Collission box renderer hides navlights for some reason.
 - [x] ter_elysium.hod created by editor fails to load in game, gives error log: `Unknown basich mesh version (2013593600)-- FATAL EXIT --basicmesh/489:!--stack trace--`.
+- [x] Remove auto creation of collision mesh.
 
-- [ ] Remove auto creation of collision mesh.
 - [ ] Repair auto loading and assignment of Texture mappings on materials (TEAM must align to TEAM mapping, GLOW to GLOW, NORM to NORM, etc.)
+- [ ] ter_zephyrus.hod has an existing docking path, but when loaded into editor, the path is rendered but not shown on the node tree.
+- [ ] loading and saving HOD 2.0 ter_zephyrus.hod crashes the game on load.
+- [ ] fix loading of HOD 1.0 files into the editor.
 - [ ] Creation and Loading of Animations and proper inspector / editor (ter_orion and hgn_mothership are examples that use this) - Added Create Animation, Add Track, and Add Keyframe controls.
+- [ ] We need to fix the editor alerts for missing components in assemblies, overall alerts in HOD being edited isn't following spec
+
 - [ ] HOD 1.0 File animation proper loading (able to be later saved on to HOD 2.0 file), Animations aren't detected when loading them currently.
 - [ ] Full Test migrating a HOD 1.0 ship to HOD 2.0 with the editor and running it in game
-- [ ] GLOW textures are rendering wrong in the texture shaded mode, shader is interpreting wrong the colors
-        see here to compare files (original and edited) `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_elysium/`
-- [ ] We need to fix the editor alerts for missing components in assemblies, overall alerts in HOD being edited isn't following spec
+- [ ] GLOW textures are rendering wrong in the texture shaded mode in editor, shader is interpreting wrong the colors, see here to compare files (original and edited) `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_elysium/`
 
 ## As a final test for HOD modifying:
 

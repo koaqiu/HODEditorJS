@@ -44,7 +44,14 @@ Before making changes to the parser, read:
 cd parser
 cargo run --bin verify_lossless
 ```
-If `verify_lossless` fails to cleanly round-trip the mesh, joint, or marker counts on the test files (`pebble_0.hod`, `ter_elysium.hod`), your changes are destructive and must be reverted/fixed immediately.
+If `verify_lossless` fails to cleanly round-trip the mesh, joint, or marker counts on the test files (`pebble_0.hod`, `ter_elysium.hod`, `ter_zephyrus.hod`), your changes are destructive and must be reverted/fixed immediately.
+
+### Useful Paths for Testing
+- **HOD 1.0 files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/`
+- **HOD 2.0 files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/`
+- **DAE files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/current_project_processing/ship_converted/`
+- **HOD 2.0 files (Vanilla game):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/ship/`
+- **HOD 2.0 files (pebbles):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/pebble/`
 
 ## 4. UI Scripts and Automated Refactoring
 

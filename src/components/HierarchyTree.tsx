@@ -1671,34 +1671,85 @@ const handleDeleteNode = (name: string, type: string) => {
               const isMarkerSelected = selectedNode?.type === "marker" && selectedNode.name === marker.name;
               if (searchTerm && !marker.name.toLowerCase().includes(searchTerm.toLowerCase())) return null;
               return (
-                <div
-                  key={marker.name}
-                  className={`list-item ${isMarkerSelected ? "active" : ""}`}
-                  onClick={() => setSelectedNode({ type: "marker", name: marker.name })}
-                  onContextMenu={(e) => handleContextMenu(e, marker.name, "marker")}
-                  draggable="true"
-                  onDragStart={(e) => {
-                    e.stopPropagation();
-                    handleDragStart(e, marker.name, "marker");
-                  }}
-                  style={{ 
-                    paddingLeft: "16px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", flex: 1 }}>
-                    <span style={{ width: "14px", flexShrink: 0 }} />
-                    <Tag size={13} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {marker.name}
-                    </span>
+                <div key={marker.name}>
+                  <div
+                    className={`list-item ${isMarkerSelected ? "active" : ""}`}
+                    onClick={() => setSelectedNode({ type: "marker", name: marker.name })}
+                    onContextMenu={(e) => handleContextMenu(e, marker.name, "marker")}
+                    draggable="true"
+                    onDragStart={(e) => {
+                      e.stopPropagation();
+                      handleDragStart(e, marker.name, "marker");
+                    }}
+                    style={{ 
+                      paddingLeft: "16px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", flex: 1 }}>
+                      <span style={{ width: "14px", flexShrink: 0 }} />
+                      <Tag size={13} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {marker.name}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      {renderEyeToggle(`marker:${marker.name}`)}
+                      {renderDeleteButton(marker.name, "marker")}
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                    {renderEyeToggle(`marker:${marker.name}`)}
-                    {renderDeleteButton(marker.name, "marker")}
-                  </div>
+                  {/* Render Dockpaths attached to this marker */}
+                  {model.dockpaths?.filter(p => p.parent_name === marker.name).map(path => {
+                    const isPathSelected = selectedNode?.type === "dockpath" && selectedNode.name === path.name;
+                    if (searchTerm && !path.name.toLowerCase().includes(searchTerm.toLowerCase())) return null;
+                    return (
+                      <div key={path.name}>
+                        <div
+                          className={`list-item ${isPathSelected ? "active" : ""}`}
+                          onClick={() => setSelectedNode({ type: "dockpath", name: path.name })}
+                          onContextMenu={(e) => handleContextMenu(e, path.name, "dockpath")}
+                          style={{ 
+                            paddingLeft: "32px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", flex: 1 }}>
+                            <span style={{ width: "14px", flexShrink: 0 }} />
+                            <Activity size={13} style={{ color: "#00e676", flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {path.name}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            {renderEyeToggle(`dockpath:${path.name}`)}
+                            {renderDeleteButton(path.name, "dockpath")}
+                          </div>
+                        </div>
+                        {path.points?.map((_pt, ptIdx) => {
+                          const ptName = `${path.name}:${ptIdx}`;
+                          const isPtSelected = selectedNode?.type === "dockpoint" && selectedNode.name === ptName;
+                          return (
+                            <div
+                              key={ptName}
+                              className={`list-item ${isPtSelected ? "active" : ""}`}
+                              onClick={() => setSelectedNode({ type: "dockpoint", name: ptName })}
+                              style={{ paddingLeft: "44px" }}
+                            >
+                              <span style={{ width: "14px", flexShrink: 0 }} />
+                              <Activity size={11} style={{ color: "#ffd54f" }} />
+                              <span style={{ fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                Point {ptIdx}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -2063,7 +2114,6 @@ const handleDeleteNode = (name: string, type: string) => {
     return !model.joints.some((other) => other.name === j.parent_name && other.name !== j.name);
   });
 
-  // Find root nav lights (nav lights whose joint is root or parentless)
   const rootNavLights = model.nav_lights?.filter(nav => {
     const joint = model.joints.find(j => j.name === nav.name);
     if (!joint) return true; // root by default if missing joint
@@ -2081,6 +2131,14 @@ const handleDeleteNode = (name: string, type: string) => {
       return !model.joints.some((other) => other.name === j.parent_name && other.name !== j.name);
     });
   });
+
+  // Find root dockpaths (dockpaths with no parent, or parent isn't a joint/marker)
+  const rootDockpaths = model.dockpaths?.filter(p => {
+    if (!p.parent_name || p.parent_name === "Root") return true;
+    const hasJointParent = model.joints.some(j => j.name === p.parent_name);
+    const hasMarkerParent = model.markers?.some(m => m.name === p.parent_name);
+    return !hasJointParent && !hasMarkerParent;
+  }) || [];
 
   return (
     <div className="panel" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -2358,7 +2416,7 @@ const handleDeleteNode = (name: string, type: string) => {
           style={{ padding: "8px 4px", overflowY: "auto", flex: 1 }}
         >
           {activeTab === "hierarchy" ? (
-            rootJoints.length > 0 || rootWeaponGroups.length > 0 || rootNavLights.length > 0 ? (
+            rootJoints.length > 0 || rootWeaponGroups.length > 0 || rootNavLights.length > 0 || rootDockpaths.length > 0 ? (
               <>
                 {rootWeaponGroups.map((baseName) => renderAssemblyNode(baseName, 0))}
                 {rootJoints.map((root) => renderJointNode(root.name, 0))}
@@ -2392,6 +2450,54 @@ const handleDeleteNode = (name: string, type: string) => {
                     {renderEyeToggle(`navlight:${nav.name}`)}
                     {renderDeleteButton(nav.name, "navlight")}
                   </div>
+                    </div>
+                  );
+                })}
+                {rootDockpaths.map((path) => {
+                  const isPathSelected = selectedNode?.type === "dockpath" && selectedNode.name === path.name;
+                  if (searchTerm && !path.name.toLowerCase().includes(searchTerm.toLowerCase())) return null;
+                  return (
+                    <div key={path.name}>
+                      <div
+                        className={`list-item ${isPathSelected ? "active" : ""}`}
+                        onClick={() => setSelectedNode({ type: "dockpath", name: path.name })}
+                        onContextMenu={(e) => handleContextMenu(e, path.name, "dockpath")}
+                        style={{ 
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", flex: 1 }}>
+                          <span style={{ width: "14px", flexShrink: 0 }} />
+                          <Activity size={13} style={{ color: "#00e676", flexShrink: 0 }} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {path.name}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          {renderEyeToggle(`dockpath:${path.name}`)}
+                          {renderDeleteButton(path.name, "dockpath")}
+                        </div>
+                      </div>
+                      {path.points?.map((_pt, ptIdx) => {
+                        const ptName = `${path.name}:${ptIdx}`;
+                        const isPtSelected = selectedNode?.type === "dockpoint" && selectedNode.name === ptName;
+                        return (
+                          <div
+                            key={ptName}
+                            className={`list-item ${isPtSelected ? "active" : ""}`}
+                            onClick={() => setSelectedNode({ type: "dockpoint", name: ptName })}
+                            style={{ paddingLeft: "12px" }}
+                          >
+                            <span style={{ width: "14px", flexShrink: 0 }} />
+                            <Activity size={11} style={{ color: "#ffd54f" }} />
+                            <span style={{ fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              Point {ptIdx}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}

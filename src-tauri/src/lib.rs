@@ -166,6 +166,8 @@ fn load_hod(file_path: String, keeper_path: Option<String>) -> Result<HODModel, 
         model.version = 512;
     }
 
+    model.auto_assign_and_resize_textures();
+
 
     write_log("INFO", &format!(
         "Successfully parsed HOD Model: '{}' | Meshes: {} | Joints: {} | Markers: {} | Materials: {} | Textures: {}",
@@ -205,7 +207,6 @@ fn save_hod(file_path: String, mut model: HODModel) -> Result<(), String> {
 
     write_log("INFO", &format!("Original HOD size: {} bytes. Patching chunks...", original_bytes.len()));
 
-    // generate_collision_mesh(&mut model); // Removed per user request
 
     // 2. Patch HIER and MRKR chunks, and MULT chunks using save_edits
     // Always use save_edits to preserve the exact original chunk structure, including
@@ -289,7 +290,6 @@ fn save_hod_as(source_path: String, target_path: String, mut model: HODModel) ->
         })?
     };
 
-    // generate_collision_mesh(&mut model); // Removed per user request
 
     let patched_bytes = hwr_hod_parser::hod::save_edits(&original_bytes, &model)
         .map_err(|e| {
@@ -532,8 +532,8 @@ fn import_dae_file(path: String) -> Result<hwr_hod_parser::hod::HODModel, String
     // Clean up hierarchy and resolve name collisions
     model.clean_hierarchy();
     model.deduplicate_names();
+    model.auto_assign_and_resize_textures();
         
-    // hwr_hod_parser::hod::generate_collision_mesh(&mut model); // Removed per user request
     
     write_log("INFO", &format!("Successfully imported DAE as HOD 2.0 ({} meshes, {} joints)", model.meshes.len(), model.joints.len()));
     Ok(model)
