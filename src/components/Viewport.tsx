@@ -40,6 +40,9 @@ export interface HODJoint {
   name: string;
   parent_name?: string;
   local_transform: Matrix4D;
+  position?: Vector3D;
+  rotation?: Vector3D;
+  scale?: Vector3D;
 }
 
 export interface HODMarker {
@@ -1435,7 +1438,7 @@ export const Viewport: React.FC<ViewportProps> = ({
       bbox.getSize(size);
       const maxDim = Math.max(size.x, size.y, size.z);
       // Scale factor: scale of joints/markers relative to the ship's longest dimension
-      const scaleFactor = hasValidBounds && maxDim > 0 ? Math.max(0.05, maxDim * 0.015) : 1.0;
+      const scaleFactor = hasValidBounds && maxDim > 0 ? Math.max(0.15, maxDim * 0.025) : 1.0;
       scaleFactorRef.current = scaleFactor;
 
       invoke("log_event", { level: "INFO", message: `Viewport: Joint pre-calculation complete. scaleFactor: ${scaleFactor}. Rendering joints and connections...` }).catch(console.error);

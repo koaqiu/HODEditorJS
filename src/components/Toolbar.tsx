@@ -8,6 +8,7 @@ interface ToolbarProps {
   onSaveAsClick?: () => void;
   isSaving: boolean;
   onNewClick?: () => void;
+  onImportDAEClick?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -17,6 +18,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onSaveAsClick,
   isSaving,
   onNewClick,
+  onImportDAEClick,
 }) => {
   return (
     <header className="toolbar" style={{ padding: "8px 16px", minHeight: "48px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -42,10 +44,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <span>New HOD</span>
             </button>
           )}
-          <button onClick={onOpenClick} style={{ height: "30px" }}>
-            <FolderOpen size={14} style={{ color: "var(--accent-cyan)" }} />
-            <span>Open HOD</span>
+          <button className="toolbar-btn primary" onClick={onOpenClick} title="Open HOD File">
+            <FolderOpen size={16} /> Open
           </button>
+          {onImportDAEClick && (
+            <button className="toolbar-btn outline" onClick={onImportDAEClick} title="Import DAE File">
+              <FolderOpen size={16} /> Import DAE
+            </button>
+          )}
            <button
             onClick={onSaveClick}
             disabled={isSaving}

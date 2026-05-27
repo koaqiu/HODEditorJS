@@ -30,7 +30,13 @@
 - [ ] Creation and Loading of Animations and proper inspector / editor (ter_orion and hgn_mothership are examples that use this) - Added Create Animation, Add Track, and Add Keyframe controls.
 - [ ] HOD 1.0 File animation proper loading (able to be later saved on to HOD 2.0 file), Animations aren't detected when loading them currently.
 - [ ] Full Test migrating a HOD 1.0 ship to HOD 2.0 with the editor and running it in game
+
 - [ ] GLOW textures are rendering wrong in the texture shaded mode, shader is interpreting wrong the colors
+
+- [ ] ter_elysium.hod created by editor fails to load in game, gives error log: `Unknown basich mesh version (2013593600)-- FATAL EXIT --basicmesh/489:!--stack trace--`.
+- [ ] We need to fix the editor alerts for missing components in assemblies of repair, salvage, capture, etc.
+- [ ] Collission box renderer hides navlights for some reason.
+- [ ] Grid has overlapping axis lines with grid lines, fix this overlap.
 
 ## As a final test for HOD modifying:
 

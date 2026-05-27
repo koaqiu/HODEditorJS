@@ -1,42 +1,51 @@
+use std::env;
 use std::fs::File;
-use std::io::{self, Read, Cursor};
+use std::io::Read;
 use hwr_hod_parser::iff::IffChunk;
 
-fn main() -> io::Result<()> {
-    let path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/ship/hgn_mothership/hgn_mothership.hod";
-    println!("Reading {}...", path);
-    let mut file = File::open(path)?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
+fn print_chunk_tree(chunk: &IffChunk, indent: usize) {
+    let padding = "  ".repeat(indent);
+    println!("{} - {} (Size: {})", padding, chunk.id, chunk.data.len());
+    for child in &chunk.children {
+        print_chunk_tree(child, indent + 1);
+    }
+}
 
-    let mut cursor = Cursor::new(&bytes);
-    let mut chunks = Vec::new();
-    while cursor.position() < bytes.len() as u64 {
-        if let Ok(chunk) = IffChunk::read_chunk(&mut cursor) {
-            chunks.push(chunk);
-        } else {
-            break;
-        }
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        println!("Usage: dump_chunks <file.hod>");
+        return;
     }
 
-    for chunk in &chunks {
-        if chunk.id == "HVMD" {
-            let stat_chunks: Vec<&IffChunk> = chunk.children.iter().filter(|c| c.id == "STAT").collect();
-            println!("Found {} STAT chunks.", stat_chunks.len());
-            for (idx, stat) in stat_chunks.iter().enumerate().take(3) {
-                println!("\n--- STAT Chunk #{} (Size: {}, Version: {}) ---", idx, stat.data.len(), stat.version);
-                // Dump hex
-                let limit = stat.data.len();
-                for chunk_slice in stat.data[..limit].chunks(16) {
-                    let hex_strs: Vec<String> = chunk_slice.iter().map(|b| format!("{:02X}", b)).collect();
-                    let ascii_strs: String = chunk_slice.iter().map(|&b| {
-                        if b >= 32 && b <= 126 { b as char } else { '.' }
-                    }).collect();
-                    println!("  {:48} | {}", hex_strs.join(" "), ascii_strs);
-                }
+    let file_path = &args[1];
+    println!("Reading {}...", file_path);
+
+    let mut file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            println!("Failed to open file: {}", e);
+            return;
+        }
+    };
+
+    let mut buffer = Vec::new();
+    if let Err(e) = file.read_to_end(&mut buffer) {
+        println!("Failed to read file: {}", e);
+        return;
+    }
+
+    let mut cursor = std::io::Cursor::new(buffer);
+    
+    while cursor.position() < cursor.get_ref().len() as u64 {
+        match IffChunk::read_chunk(&mut cursor) {
+            Ok(chunk) => {
+                print_chunk_tree(&chunk, 0);
+            }
+            Err(e) => {
+                println!("Failed to read root chunk: {}", e);
+                break;
             }
         }
     }
-
-    Ok(())
 }

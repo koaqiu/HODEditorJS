@@ -229,6 +229,26 @@ pub struct ParsingContext {
 }
 
 impl HODModel {
+    pub fn new() -> Self {
+        Self {
+            version: 0,
+            is_v2: false,
+            name: String::new(),
+            textures: Vec::new(),
+            materials: Vec::new(),
+            meshes: Vec::new(),
+            joints: Vec::new(),
+            markers: Vec::new(),
+            nav_lights: Vec::new(),
+            engine_burns: Vec::new(),
+            engine_glows: Vec::new(),
+            engine_shapes: Vec::new(),
+            collision_meshes: Vec::new(),
+            dockpaths: Vec::new(),
+            animations: Vec::new(),
+        }
+    }
+
     /// Legacy parser fallback
     pub fn parse(bytes: &[u8]) -> Result<Self, String> {
         Self::parse_with_external(bytes, None, None)
@@ -350,7 +370,7 @@ impl HODModel {
                 "VERS" => {
                     println!("[RUST]     Parsing VERS...");
                     let mut r = Cursor::new(&chunk.data);
-                    if let Ok(ver) = r.read_u32::<BigEndian>() {
+                    if let Ok(ver) = r.read_u32::<LittleEndian>() {
                         model_version = ver;
                     }
                 }
@@ -439,21 +459,47 @@ impl HODModel {
                                                 let current_pos = reader.position() as usize;
                                                 let mut sub_chunks = Vec::new();
                                                 let mut sub_cursor = Cursor::new(&sub_chunk.data[current_pos..]);
+                                                println!("[RUST]         MULT payload current_pos={}, total_len={}, remaining={}", current_pos, sub_chunk.data.len(), sub_chunk.data.len() - current_pos);
+                                                let mut debug_bytes = [0u8; 16];
+                                                let pos = sub_cursor.position();
+                                                let _ = sub_cursor.read(&mut debug_bytes);
+                                                println!("[RUST]         Next 16 bytes at pos {}: {:02x?}", pos, debug_bytes);
+                                                sub_cursor.set_position(pos);
+
                                                 while sub_cursor.position() < sub_cursor.get_ref().len() as u64 {
-                                                    if let Ok(c) = IffChunk::read_chunk(&mut sub_cursor) {
-                                                        sub_chunks.push(c);
-                                                    } else {
-                                                        break;
+                                                    match IffChunk::read_chunk(&mut sub_cursor) {
+                                                        Ok(c) => sub_chunks.push(c),
+                                                        Err(e) => {
+                                                            println!("[RUST] WARNING: Failed to read chunk inside MULT: {}", e);
+                                                            break;
+                                                        }
                                                     }
                                                 }
 
                                                  println!("[RUST]         {} child chunks parsed: {}", sub_chunk.id, sub_chunks.len());
                                                  for child in &sub_chunks {
-                                                     if child.id.trim() == "BMSH" {
-                                                         let mut mesh = parse_basic_mesh(child, &mut context)
+                                                     println!("[RUST]         Checking child chunk ID='{}' (len={}) against BMSH", child.id, child.data.len());
+                                                     
+                                                     let is_nrml_bmsh = child.id.trim() == "NRML" && child.data.starts_with(b"BMSH");
+                                                     let actual_child = if is_nrml_bmsh {
+                                                         println!("[RUST]         Unwrapping BMSH from NRML chunk");
+                                                         std::borrow::Cow::Owned(IffChunk {
+                                                             id: "BMSH".to_string(),
+                                                             chunk_type: crate::iff::ChunkType::Default,
+                                                             version: 0,
+                                                             data: child.data[4..].to_vec(),
+                                                             children: Vec::new(),
+                                                         })
+                                                     } else {
+                                                         std::borrow::Cow::Borrowed(child)
+                                                     };
+
+                                                     if actual_child.id.trim() == "BMSH" {
+                                                         let mut mesh = parse_basic_mesh(&actual_child, &mut context)
                                                             .map_err(|e| format!("Error in BMSH under {}: {}", sub_chunk.id, e))?;
                                                         mesh.name = name.clone();
                                                         mesh.parent_name = parent_name.clone();
+                                                        println!("[RUST]         PUSHING MESH '{}' to meshes list. Previous meshes.len()={}", mesh.name, meshes.len());
                                                         meshes.push(mesh);
                                                     }
                                                 }
@@ -981,7 +1027,122 @@ impl HODModel {
             }
         }
 
+        model.clean_hierarchy();
+        model.deduplicate_names();
+
         Ok(model)
+    }
+
+    pub fn clean_hierarchy(&mut self) {
+        // Special prefixes that shouldn't have arbitrary children
+        let special_prefixes = ["NAVL[", "BURN[", "MARK[", "MULT[", "COL[", "SHAP[", "GLOW["];
+        
+        // Loop multiple times in case of deep invalid nesting
+        let mut changed = true;
+        while changed {
+            changed = false;
+            let mut updates = Vec::new(); // (child_idx, new_parent_name, new_transform)
+
+            for (i, joint) in self.joints.iter().enumerate() {
+                if let Some(parent_name) = &joint.parent_name {
+                    // Check if parent name indicates a special node
+                    let is_invalid_parent = special_prefixes.iter().any(|&p| parent_name.starts_with(p) || parent_name == &p[..p.len()-1]);
+                    
+                    // Flame joints are allowed under BURN
+                    let is_allowed_flame = parent_name.starts_with("BURN[") && joint.name.starts_with("Flame[");
+
+                    if is_invalid_parent && !is_allowed_flame {
+                        // Find the parent joint to extract its transform and its parent
+                        if let Some(parent_joint) = self.joints.iter().find(|j| j.name == *parent_name) {
+                            let new_parent_name = parent_joint.parent_name.clone();
+                            // Multiply parent's local transform by child's local transform
+                            // In Homeworld matrices, transform = parent * child
+                            let p_mat = &parent_joint.local_transform.m;
+                            let c_mat = &joint.local_transform.m;
+                            
+                            let mut new_transform = crate::hod::Matrix4 { m: [[0.0; 4]; 4] };
+                            for r in 0..4 {
+                                for c in 0..4 {
+                                    new_transform.m[r][c] = 
+                                        p_mat[r][0] * c_mat[0][c] +
+                                        p_mat[r][1] * c_mat[1][c] +
+                                        p_mat[r][2] * c_mat[2][c] +
+                                        p_mat[r][3] * c_mat[3][c];
+                                }
+                            }
+                            
+                            updates.push((i, new_parent_name, new_transform));
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            // Apply updates
+            for (idx, new_parent, new_transform) in updates {
+                self.joints[idx].parent_name = new_parent;
+                self.joints[idx].local_transform = new_transform;
+            }
+
+            // --- FUNCTIONAL NODES CLEANUP ---
+            // If any functional node has its parent_name pointing to a special endpoint, we un-nest it.
+            // Functional nodes do not carry a full hierarchical local_transform matrix to adapt in the same way,
+            // they simply inherit their parent's absolute space.
+            
+            let mut check_and_update = |parent_name_ref: &mut String| {
+                if special_prefixes.iter().any(|&p| parent_name_ref.starts_with(p) || parent_name_ref == &p[..p.len()-1]) {
+                    if let Some(parent_joint) = self.joints.iter().find(|j| &j.name == parent_name_ref) {
+                        if let Some(new_p) = &parent_joint.parent_name {
+                            *parent_name_ref = new_p.clone();
+                            changed = true;
+                        }
+                    }
+                }
+            };
+
+            for burn in &mut self.engine_burns {
+                check_and_update(&mut burn.parent_name);
+            }
+            for glow in &mut self.engine_glows { check_and_update(&mut glow.parent_name); }
+            for shape in &mut self.engine_shapes { check_and_update(&mut shape.parent_name); }
+            for path in &mut self.dockpaths { check_and_update(&mut path.parent_name); }
+            for mesh in &mut self.meshes {
+                check_and_update(&mut mesh.parent_name);
+            }
+            for marker in &mut self.markers {
+                check_and_update(&mut marker.parent_joint);
+            }
+        }
+    }
+
+    pub fn deduplicate_names(&mut self) {
+        use std::collections::HashMap;
+        
+        let mut joint_names = HashMap::new();
+        let mut renames = HashMap::new(); // Old Name -> New Name
+
+        // First pass: Rename duplicate joints
+        for joint in &mut self.joints {
+            let count = joint_names.entry(joint.name.clone()).or_insert(0);
+            *count += 1;
+            if *count > 1 {
+                let new_name = format!("{}_{}", joint.name, count);
+                renames.insert(joint.name.clone(), new_name.clone());
+                println!("[RUST] WARNING: Duplicate joint name '{}' found. Renamed to '{}'.", joint.name, new_name);
+                joint.name = new_name;
+            }
+        }
+        
+        let mut mesh_names = HashMap::new();
+        for mesh in &mut self.meshes {
+            let count = mesh_names.entry(mesh.name.clone()).or_insert(0);
+            *count += 1;
+            if *count > 1 {
+                let new_name = format!("{}_{}", mesh.name, count);
+                println!("[RUST] WARNING: Duplicate mesh name '{}' found. Renamed to '{}'.", mesh.name, new_name);
+                mesh.name = new_name;
+            }
+        }
     }
 }
 
@@ -1851,7 +2012,89 @@ fn write_len_string<W: Write>(writer: &mut W, s: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn compose_transform_matrix(pos: Vector3, rot: Vector3, scale: Vector3) -> Matrix4 {
+pub fn synthesize_engine_nozzles_v1(model: &mut HODModel) {
+    let mut burns = Vec::new();
+    let mut remaining_navs = Vec::new();
+    
+    for nav in &model.nav_lights {
+        if nav.name.starts_with("e") && nav.name.len() >= 2 && nav.name[1..].chars().all(char::is_numeric) {
+            let size = if nav.size > 0.0 { nav.size } else { 4.0 };
+            burns.push(crate::hod::HODEngineBurn {
+                name: nav.name.clone(),
+                parent_name: nav.name.clone(),
+                num_divisions: 8,
+                num_flames: 1,
+                vertices: vec![
+                    crate::hod::Vector3 { x: -size, y: -size, z: 0.0 },
+                    crate::hod::Vector3 { x: size, y: -size, z: 0.0 },
+                    crate::hod::Vector3 { x: size, y: size, z: 0.0 },
+                    crate::hod::Vector3 { x: -size, y: size, z: 0.0 },
+                ],
+            });
+        } else {
+            remaining_navs.push(nav.clone());
+        }
+    }
+    model.nav_lights = remaining_navs;
+    model.engine_burns.extend(burns);
+}
+
+pub fn reverse_engine_nozzles_v1(model: &mut HODModel) {
+    if model.engine_burns.is_empty() { return; }
+    
+    let mut new_navs = Vec::new();
+    let mut i = 0;
+    while i < model.engine_burns.len() {
+        let burn = &model.engine_burns[i];
+        if burn.name.starts_with("e") && burn.name.len() >= 2 && burn.name[1..].chars().all(char::is_numeric) {
+            new_navs.push(crate::hod::HODNavLight {
+                name: burn.name.clone(),
+                section: 0,
+                size: 4.0, // Best guess fallback
+                phase: 0.0,
+                frequency: 1.0,
+                style: "engine".to_string(),
+                color: crate::hod::Vector3 { x: 1.0, y: 1.0, z: 1.0 },
+                distance: 0.0,
+                sprite_visible: true,
+                high_end_only: false,
+            });
+            model.engine_burns.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+    
+    model.nav_lights.extend(new_navs);
+}
+
+pub fn validate_marker_parents(model: &mut HODModel) {
+    for marker in &mut model.markers {
+        if marker.parent_joint.is_empty() {
+            marker.parent_joint = "Root".to_string();
+        }
+    }
+}
+
+pub fn generate_collision_mesh(model: &mut HODModel) {
+    if model.collision_meshes.is_empty() {
+        model.collision_meshes.push(crate::hod::HODCollisionMesh {
+            name: "CollisionMesh".to_string(),
+            min_extents: crate::hod::Vector3 { x: -10.0, y: -10.0, z: -10.0 },
+            max_extents: crate::hod::Vector3 { x: 10.0, y: 10.0, z: 10.0 },
+            center: crate::hod::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+            radius: 10.0,
+            mesh: crate::hod::HODMesh {
+                name: "CollisionMesh".to_string(),
+                parent_name: String::new(),
+                lod: 0,
+                parts: Vec::new(),
+            },
+        });
+    }
+}
+
+pub fn compose_transform_matrix(pos: Vector3, rot: Vector3, scale: Vector3) -> Matrix4 {
     let cx = rot.x.cos();
     let sx = rot.x.sin();
     let cy = rot.y.cos();
@@ -2550,6 +2793,289 @@ fn sanitize_prim_group_counts(chunks: &mut [IffChunk]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result<Vec<u8>, String> {
+    use crate::iff::{IffChunk, ChunkType};
+    use crate::xpress;
+    let compiled = crate::compiler::compile_model_meshes(model);
+    
+    let mut original_chunks = Vec::new();
+    if !original_bytes.is_empty() {
+        let mut reader = Cursor::new(original_bytes);
+        while let Ok(chunk) = IffChunk::read_chunk(&mut reader) {
+            original_chunks.push(chunk);
+        }
+    }
+    
+    let mut tex_buf = Vec::new();
+    for chunk in &original_chunks {
+        if chunk.id == "POOL" {
+            let mut pool_cursor = Cursor::new(&chunk.data);
+            if let Ok(_pool_type) = pool_cursor.read_u32::<LittleEndian>() {
+                if let Ok(comp_tex_len) = pool_cursor.read_u32::<LittleEndian>() {
+                    if let Ok(decomp_tex_len) = pool_cursor.read_u32::<LittleEndian>() {
+                        let mut comp_tex = vec![0u8; comp_tex_len as usize];
+                        if pool_cursor.read_exact(&mut comp_tex).is_ok() {
+                            if let Ok(decomp_tex) = xpress::decompress(&comp_tex, decomp_tex_len as usize) {
+                                tex_buf = decomp_tex;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let pool_data = crate::compiler::generate_pool_data(&compiled, &tex_buf).map_err(|e| e.to_string())?;
+    let mut hvmd_children = Vec::new();
+
+    // Add preserved HVMD children (EXCEPT MULT)
+    let mut stat_chunks_preserved = 0;
+    for chunk in &original_chunks {
+        if chunk.id == "HVMD" {
+            for child in &chunk.children {
+                if child.id != "MULT" {
+                    if child.id == "STAT" {
+                        stat_chunks_preserved += 1;
+                    }
+                    hvmd_children.push(child.clone());
+                }
+            }
+        }
+    }
+    
+    // If we didn't preserve any STAT chunks (e.g. DAE import), generate empty ones for each material
+    if stat_chunks_preserved == 0 && !model.materials.is_empty() {
+        for mat in &model.materials {
+            let mut stat_buf = Vec::new();
+            let mut stat_cursor = Cursor::new(&mut stat_buf);
+            
+            write_len_string(&mut stat_cursor, &mat.name).unwrap();
+            write_len_string(&mut stat_cursor, &mat.shader_name).unwrap();
+            stat_cursor.write_u32::<LittleEndian>(0).unwrap(); // param count = 0
+            
+            hvmd_children.push(IffChunk {
+                id: "STAT".to_string(),
+                chunk_type: ChunkType::Normal,
+                version: 1001,
+                data: stat_buf,
+                children: Vec::new(),
+            });
+        }
+    } else if stat_chunks_preserved == 0 && model.materials.is_empty() {
+        // Fallback default material
+        let mut stat_buf = Vec::new();
+        let mut stat_cursor = Cursor::new(&mut stat_buf);
+        write_len_string(&mut stat_cursor, "default_mat").unwrap();
+        write_len_string(&mut stat_cursor, "default_shader").unwrap();
+        stat_cursor.write_u32::<LittleEndian>(0).unwrap();
+        
+        hvmd_children.push(IffChunk {
+            id: "STAT".to_string(),
+            chunk_type: ChunkType::Normal,
+            version: 1001,
+            data: stat_buf,
+            children: Vec::new(),
+        });
+    }
+
+    // Add MULT chunks
+    let mult_chunks = crate::compiler::generate_mult_chunks(&compiled).map_err(|e: std::io::Error| e.to_string())?;
+    for mult in mult_chunks {
+        hvmd_children.push(mult);
+    }
+
+    let hvmd_chunk = IffChunk {
+        id: "HVMD".to_string(),
+        chunk_type: ChunkType::Form,
+        version: 0,
+        data: Vec::new(),
+        children: hvmd_children,
+    };
+    
+    // Build DTRM children
+    let mut dtrm_children = Vec::new();
+    
+    // Bug 1 fix: Compute first_val dynamically from joint count
+    // Bug 2 fix: Use ChunkType::Form (FORM HIER), not ChunkType::Normal (NRML HIER)
+    // Bug 3 fix: Use actual joint rotation/scale data, not hardcoded zeros/ones
+    let mut hier_buf = Vec::new();
+    {
+        let joint_count = model.joints.len() as i32;
+        let first_val = (0xFFFFFF00u32 | ((-joint_count) as u32 & 0xFF)) as u32;
+        hier_buf.write_u32::<LittleEndian>(first_val).map_err(|e| e.to_string())?;
+    }
+    for joint in &model.joints {
+        write_len_string(&mut hier_buf, &joint.name)?;
+        let parent_str = joint.parent_name.clone().unwrap_or_default();
+        write_len_string(&mut hier_buf, &parent_str)?;
+
+        let (pos, rot, scale) = if let (Some(ref p), Some(ref r), Some(ref s)) = (&joint.position, &joint.rotation, &joint.scale) {
+            (p.clone(), r.clone(), s.clone())
+        } else {
+            let (p, r, s) = decompose_matrix(joint.local_transform.clone());
+            (p, r, s)
+        };
+
+        hier_buf.write_f32::<LittleEndian>(pos.x).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(pos.y).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(pos.z).map_err(|e| e.to_string())?;
+
+        hier_buf.write_f32::<LittleEndian>(rot.x).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(rot.y).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(rot.z).map_err(|e| e.to_string())?;
+
+        hier_buf.write_f32::<LittleEndian>(scale.x).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(scale.y).map_err(|e| e.to_string())?;
+        hier_buf.write_f32::<LittleEndian>(scale.z).map_err(|e| e.to_string())?;
+    }
+    dtrm_children.push(IffChunk {
+        id: "HIER".to_string(),
+        chunk_type: ChunkType::Form,
+        version: 0,
+        data: hier_buf,
+        children: Vec::new(),
+    });
+    
+    if !model.markers.is_empty() {
+        let mut mrkr_buf = Vec::new();
+        mrkr_buf.write_u32::<LittleEndian>(model.markers.len() as u32).map_err(|e| e.to_string())?;
+        for mrkr in &model.markers {
+            let m_bytes = serialize_single_marker(mrkr, true)?;
+            mrkr_buf.write_all(&m_bytes).map_err(|e| e.to_string())?;
+        }
+        dtrm_children.push(IffChunk {
+            id: "MRKS".to_string(),
+            chunk_type: ChunkType::Default,
+            version: 0,
+            data: mrkr_buf,
+            children: Vec::new(),
+        });
+    }
+
+    // Bug 4 fix: Write individual BURN chunks with ChunkType::Default, not one consolidated NRML BURN
+    for burn in &model.engine_burns {
+        let mut data = Vec::new();
+        write_len_string(&mut data, &burn.name)?;
+        write_len_string(&mut data, &burn.parent_name)?;
+        data.write_i32::<LittleEndian>(burn.num_divisions).map_err(|e| e.to_string())?;
+        data.write_i32::<LittleEndian>(burn.num_flames).map_err(|e| e.to_string())?;
+        for v in &burn.vertices {
+            data.write_f32::<LittleEndian>(v.x).map_err(|e| e.to_string())?;
+            data.write_f32::<LittleEndian>(v.y).map_err(|e| e.to_string())?;
+            data.write_f32::<LittleEndian>(v.z).map_err(|e| e.to_string())?;
+        }
+        dtrm_children.push(IffChunk {
+            id: "BURN".to_string(),
+            chunk_type: ChunkType::Default,
+            version: 0,
+            data,
+            children: Vec::new(),
+        });
+    }
+
+    // Bug 5 fix: Regenerate NAVL from model data instead of preserving stale original
+    if !model.nav_lights.is_empty() {
+        let mut navl_data = Vec::new();
+        navl_data.write_u32::<LittleEndian>(model.nav_lights.len() as u32).map_err(|e| e.to_string())?;
+        for nav in &model.nav_lights {
+            write_len_string(&mut navl_data, &nav.name)?;
+            navl_data.write_u32::<LittleEndian>(nav.section).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(nav.size).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(nav.phase).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(nav.frequency).map_err(|e| e.to_string())?;
+            write_len_string(&mut navl_data, &nav.style)?;
+            navl_data.write_f32::<LittleEndian>(nav.color.x).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(nav.color.y).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(nav.color.z).map_err(|e| e.to_string())?;
+            navl_data.write_f32::<LittleEndian>(1.0).map_err(|e| e.to_string())?; // _unused f32
+            navl_data.write_f32::<LittleEndian>(nav.distance).map_err(|e| e.to_string())?;
+            navl_data.write_u8(if nav.sprite_visible { 1 } else { 0 }).map_err(|e| e.to_string())?;
+            navl_data.write_u8(if nav.high_end_only { 1 } else { 0 }).map_err(|e| e.to_string())?;
+        }
+        dtrm_children.push(IffChunk {
+            id: "NAVL".to_string(),
+            chunk_type: ChunkType::Normal,
+            version: 3,
+            data: navl_data,
+            children: Vec::new(),
+        });
+    }
+
+    // Add preserved DTRM children (MRKS, KDOP, COLD, SCAR — skip HIER, MRKR, BURN, NAVL since we regenerated them)
+    for chunk in &original_chunks {
+        if chunk.id == "DTRM" {
+            for child in &chunk.children {
+                if child.id != "HIER" && child.id != "MRKR" && child.id != "BURN" && child.id != "NAVL" && child.id != "MRKS" {
+                    dtrm_children.push(child.clone());
+                }
+            }
+        }
+    }
+    
+    let dtrm_chunk = IffChunk {
+        id: "DTRM".to_string(),
+        chunk_type: ChunkType::Form,
+        version: 0,
+        data: Vec::new(),
+        children: dtrm_children,
+    };
+    
+    // Assemble top-level chunks
+    let mut top_chunks = Vec::new();
+    
+    // VERS
+    let mut vers_data = Vec::new();
+    vers_data.write_u32::<LittleEndian>(model.version).unwrap(); // Use LittleEndian to match original HOD 2.0 files
+    top_chunks.push(IffChunk {
+        id: "VERS".to_string(),
+        chunk_type: ChunkType::Form,
+        version: 0,
+        data: vers_data,
+        children: Vec::new(),
+    });
+    
+    // NAME
+    let name_bytes = if model.name.is_empty() { b"cloned_mesh\0".to_vec() } else { 
+        let mut n = model.name.as_bytes().to_vec(); 
+        n.push(0); 
+        n 
+    };
+    top_chunks.push(IffChunk {
+        id: "NAME".to_string(),
+        chunk_type: ChunkType::Form,
+        version: 0,
+        data: name_bytes,
+        children: Vec::new(),
+    });
+    
+    // POOL
+    top_chunks.push(IffChunk {
+        id: "POOL".to_string(),
+        chunk_type: ChunkType::Default,
+        version: 0,
+        data: pool_data,
+        children: Vec::new(),
+    });
+    
+    // HVMD & DTRM
+    top_chunks.push(hvmd_chunk);
+    top_chunks.push(dtrm_chunk);
+    
+    // Add preserved Root children
+    for chunk in &original_chunks {
+        if chunk.id != "VERS" && chunk.id != "NAME" && chunk.id != "POOL" && chunk.id != "HVMD" && chunk.id != "DTRM" {
+            top_chunks.push(chunk.clone());
+        }
+    }
+    
+    let mut hod_buf = Vec::new();
+    for chunk in &top_chunks {
+        chunk.write_chunk(&mut hod_buf).map_err(|e| e.to_string())?;
+    }
+    
+    Ok(hod_buf)
 }
 
 pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec<u8>, String> {

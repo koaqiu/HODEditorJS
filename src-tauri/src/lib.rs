@@ -117,6 +117,25 @@ fn select_keeper_file() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn select_dae_file() -> Result<Option<String>, String> {
+    write_log("INFO", "Opening native file dialog for DAE file...");
+    let file = rfd::FileDialog::new()
+        .add_filter("Collada DAE Files", &["dae", "DAE"])
+        .pick_file();
+
+    match &file {
+        Some(path) => {
+            write_log("INFO", &format!("User selected DAE file: {}", path.to_string_lossy()));
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        None => {
+            write_log("INFO", "User canceled DAE file selection dialog");
+            Ok(None)
+        }
+    }
+}
+
+#[tauri::command]
 fn load_hod(file_path: String, keeper_path: Option<String>) -> Result<HODModel, String> {
     write_log("INFO", &format!("Attempting to load HOD from path: {} with keeper_path: {:?}", file_path, keeper_path));
     
@@ -131,12 +150,22 @@ fn load_hod(file_path: String, keeper_path: Option<String>) -> Result<HODModel, 
     write_log("INFO", &format!("Successfully read {} bytes from disk. Parsing HOD structures...", bytes.len()));
 
     // Parse the HOD structure using our native pure-Rust parser engine with external TGA texture support
-    let model = HODModel::parse_with_external(&bytes, Some(&file_path), keeper_path.as_deref())
+    let mut model = HODModel::parse_with_external(&bytes, Some(&file_path), keeper_path.as_deref())
         .map_err(|e| {
             let err_msg = format!("Failed to parse HOD file: {}", e);
             write_log("ERROR", &err_msg);
             err_msg
         })?;
+
+    // Auto-transform legacy HOD 1.0 models on open
+    if !model.is_v2 {
+        write_log("INFO", "HOD 1.0 detected on open. Automatically applying backward compatibility transformations (e.g., Engine Burns extraction)...");
+        hwr_hod_parser::hod::synthesize_engine_nozzles_v1(&mut model);
+        hwr_hod_parser::hod::validate_marker_parents(&mut model);
+        model.is_v2 = true;
+        model.version = 512;
+    }
+
 
     write_log("INFO", &format!(
         "Successfully parsed HOD Model: '{}' | Meshes: {} | Joints: {} | Markers: {} | Materials: {} | Textures: {}",
@@ -160,26 +189,40 @@ fn load_hod(file_path: String, keeper_path: Option<String>) -> Result<HODModel, 
 }
 
 #[tauri::command]
-fn save_hod(file_path: String, model: HODModel) -> Result<(), String> {
+fn save_hod(file_path: String, mut model: HODModel) -> Result<(), String> {
     write_log("INFO", &format!("Saving HOD edits to: {}", file_path));
     
-    // 1. Read the original HOD file bytes
-    let original_bytes = fs::read(&file_path)
-        .map_err(|e| {
+    // 1. Read the original HOD file bytes (or use empty if new file)
+    let original_bytes = if file_path.is_empty() || !std::path::Path::new(&file_path).exists() {
+        Vec::new()
+    } else {
+        fs::read(&file_path).map_err(|e| {
             let err_msg = format!("Failed to read original HOD file: {}", e);
             write_log("ERROR", &err_msg);
             err_msg
-        })?;
+        })?
+    };
 
     write_log("INFO", &format!("Original HOD size: {} bytes. Patching chunks...", original_bytes.len()));
 
-    // 2. Patch HIER and MRKR chunks in-memory using our native serializer
-    let patched_bytes = hwr_hod_parser::hod::save_edits(&original_bytes, &model)
-        .map_err(|e| {
-            let err_msg = format!("Failed to serialize HOD edits: {}", e);
-            write_log("ERROR", &err_msg);
-            err_msg
-        })?;
+    hwr_hod_parser::hod::generate_collision_mesh(&mut model);
+
+    // 2. Patch HIER and MRKR chunks or generate full v2 in-memory
+    let patched_bytes = if model.is_v2 {
+        hwr_hod_parser::hod::generate_v2_from_model(&original_bytes, &model)
+            .map_err(|e| {
+                let err_msg = format!("Failed to generate HOD v2: {}", e);
+                write_log("ERROR", &err_msg);
+                err_msg
+            })?
+    } else {
+        hwr_hod_parser::hod::save_edits(&original_bytes, &model)
+            .map_err(|e| {
+                let err_msg = format!("Failed to serialize HOD edits: {}", e);
+                write_log("ERROR", &err_msg);
+                err_msg
+            })?
+    };
 
     write_log("INFO", &format!("Successfully serialized edited HOD stream ({} bytes). Writing back to disk...", patched_bytes.len()));
 
@@ -240,22 +283,36 @@ fn select_save_hod_file(default_name: Option<String>) -> Result<Option<String>, 
 }
 
 #[tauri::command]
-fn save_hod_as(source_path: String, target_path: String, model: HODModel) -> Result<(), String> {
+fn save_hod_as(source_path: String, target_path: String, mut model: HODModel) -> Result<(), String> {
     write_log("INFO", &format!("Saving HOD edits as: {} -> {}", source_path, target_path));
     
-    let original_bytes = fs::read(&source_path)
-        .map_err(|e| {
+    let original_bytes = if source_path.is_empty() || !std::path::Path::new(&source_path).exists() {
+        Vec::new()
+    } else {
+        fs::read(&source_path).map_err(|e| {
             let err_msg = format!("Failed to read original HOD file from source: {}", e);
             write_log("ERROR", &err_msg);
             err_msg
-        })?;
+        })?
+    };
 
-    let patched_bytes = hwr_hod_parser::hod::save_edits(&original_bytes, &model)
-        .map_err(|e| {
-            let err_msg = format!("Failed to serialize HOD edits: {}", e);
-            write_log("ERROR", &err_msg);
-            err_msg
-        })?;
+    hwr_hod_parser::hod::generate_collision_mesh(&mut model);
+
+    let patched_bytes = if model.is_v2 {
+        hwr_hod_parser::hod::generate_v2_from_model(&original_bytes, &model)
+            .map_err(|e| {
+                let err_msg = format!("Failed to generate HOD v2: {}", e);
+                write_log("ERROR", &err_msg);
+                err_msg
+            })?
+    } else {
+        hwr_hod_parser::hod::save_edits(&original_bytes, &model)
+            .map_err(|e| {
+                let err_msg = format!("Failed to serialize HOD edits: {}", e);
+                write_log("ERROR", &err_msg);
+                err_msg
+            })?
+    };
 
     fs::write(&target_path, &patched_bytes)
         .map_err(|e| {
@@ -471,6 +528,34 @@ fn import_tga_texture(hod_file_path: String) -> Result<Option<HODTexture>, Strin
     }
 }
 
+#[tauri::command]
+fn import_dae_file(path: String) -> Result<hwr_hod_parser::hod::HODModel, String> {
+    write_log("INFO", &format!("Importing DAE file from: {}", path));
+    
+    let xml_str = std::fs::read_to_string(&path)
+        .map_err(|e| {
+            let err_msg = format!("Failed to read DAE file: {}", e);
+            write_log("ERROR", &err_msg);
+            err_msg
+        })?;
+        
+    let mut model = hwr_hod_parser::dae::parse_dae(&xml_str)
+        .map_err(|e| {
+            let err_msg = format!("Failed to parse DAE XML: {}", e);
+            write_log("ERROR", &err_msg);
+            err_msg
+        })?;
+    // Clean up hierarchy and resolve name collisions
+    model.clean_hierarchy();
+    model.deduplicate_names();
+        
+    // Generate collision mesh and bounds like load_hod
+    hwr_hod_parser::hod::generate_collision_mesh(&mut model);
+    
+    write_log("INFO", &format!("Successfully imported DAE as HOD 2.0 ({} meshes, {} joints)", model.meshes.len(), model.joints.len()));
+    Ok(model)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -501,7 +586,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, load_hod, save_hod, select_hod_file, select_keeper_file, log_event, get_shader_pipelines, save_text_file, load_text_file, export_textures_tga, import_tga_texture, select_save_hod_file, save_hod_as])
+        .invoke_handler(tauri::generate_handler![greet, load_hod, save_hod, select_hod_file, select_keeper_file, log_event, get_shader_pipelines, save_text_file, load_text_file, export_textures_tga, import_tga_texture, select_save_hod_file, save_hod_as, import_dae_file, select_dae_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

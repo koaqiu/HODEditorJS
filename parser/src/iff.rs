@@ -26,7 +26,20 @@ impl IffChunk {
         }
         let raw_id = String::from_utf8_lossy(&id_bytes).to_string();
 
-        let size = reader.read_u32::<BigEndian>()? as usize;
+        let mut size_bytes = [0u8; 4];
+        reader.read_exact(&mut size_bytes)?;
+        
+        let mut size = u32::from_be_bytes(size_bytes);
+        let size_le = u32::from_le_bytes(size_bytes);
+        
+        // Dynamic endianness detection: if BigEndian size is ridiculously large (e.g., > 16MB) 
+        // and LittleEndian size is reasonable, use LittleEndian.
+        // HOD 2.0 MULT child chunks use LittleEndian for their sizes (like BMSH).
+        let mut used_le = false;
+        if size > 0x00FFFFFF && size_le <= 0x00FFFFFF {
+            size = size_le;
+            used_le = true;
+        }
 
         match raw_id.as_str() {
             "FORM" => {
@@ -34,7 +47,7 @@ impl IffChunk {
                 reader.read_exact(&mut real_id_bytes)?;
                 let real_id = String::from_utf8_lossy(&real_id_bytes).to_string();
 
-                let payload_size = size.saturating_sub(4);
+                let payload_size = size.saturating_sub(4) as usize;
                 let mut payload = vec![0u8; payload_size];
                 reader.read_exact(&mut payload)?;
 
@@ -107,7 +120,7 @@ impl IffChunk {
 
                 let version = reader.read_u32::<BigEndian>()?;
 
-                let payload_size = size.saturating_sub(8);
+                let payload_size = size.saturating_sub(8) as usize;
                 let mut data = vec![0u8; payload_size];
                 reader.read_exact(&mut data)?;
 
@@ -121,7 +134,7 @@ impl IffChunk {
             }
             _ => {
                 // DEFAULT chunks (like POOL, BGLT)
-                let mut data = vec![0u8; size];
+                let mut data = vec![0u8; size as usize];
                 reader.read_exact(&mut data)?;
 
                 Ok(Self {

@@ -201,6 +201,7 @@ export const Inspector: React.FC<InspectorProps> = ({
     if (selectedNode) {
       if (
         selectedNode.type === "weapon_group" ||
+        selectedNode.type === "turret_group" ||
         selectedNode.type === "hardpoint_group" ||
         selectedNode.type === "capture_point_group" ||
         selectedNode.type === "repair_point_group" ||
@@ -410,6 +411,7 @@ export const Inspector: React.FC<InspectorProps> = ({
 
     if (
       selectedNode.type === "weapon_group" ||
+      selectedNode.type === "turret_group" ||
       selectedNode.type === "hardpoint_group" ||
       selectedNode.type === "capture_point_group" ||
       selectedNode.type === "repair_point_group" ||
@@ -419,7 +421,8 @@ export const Inspector: React.FC<InspectorProps> = ({
       const groupType = selectedNode.type;
 
       let groupLabel = "Unified Weapon Assembly";
-      if (groupType === "hardpoint_group") groupLabel = "Hardpoint Assembly";
+      if (groupType === "turret_group") groupLabel = "Turret Assembly";
+      else if (groupType === "hardpoint_group") groupLabel = "Hardpoint Assembly";
       else if (groupType === "capture_point_group") groupLabel = "Capture Point Assembly";
       else if (groupType === "repair_point_group") groupLabel = "Repair Point Assembly";
       else if (groupType === "salvage_point_group") groupLabel = "Salvage Point Assembly";
@@ -435,9 +438,18 @@ export const Inspector: React.FC<InspectorProps> = ({
       if (groupType === "weapon_group") {
         jointSpecs = [
           { key: "Position", label: "1. Position (Pivot / Yaw)", suffix: "_Position", parentSuffix: null, defaultOffset: { x: 0, y: 0, z: 0 } },
-          { key: "Direction", label: "2. Direction (Elevation / Pitch)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 1.0, z: 0 } },
-          { key: "Muzzle", label: "3. Muzzle (Projectile spawn)", suffix: "_Muzzle", parentSuffix: "_Direction", defaultOffset: { x: 0, y: 1.0, z: 0 } },
-          { key: "Rest", label: "4. Rest (Idle standard)", suffix: "_Rest", parentSuffix: "_Position", defaultOffset: { x: 1.0, y: 0, z: 0 } },
+          { key: "Direction", label: "2. Direction (Elevation / Pitch)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
+          { key: "Muzzle", label: "3. Muzzle (Projectile spawn)", suffix: "_Muzzle", parentSuffix: "_Direction", defaultOffset: { x: 0, y: 0, z: 5.0 } },
+          { key: "Rest", label: "4. Rest (Idle standard)", suffix: "_Rest", parentSuffix: "_Position", defaultOffset: { x: 0, y: 0, z: 5.0 } },
+        ];
+      } else if (groupType === "turret_group") {
+        jointSpecs = [
+          { key: "Position", label: "1. Position (Yaw)", suffix: "_Position", parentSuffix: null, defaultOffset: { x: 0, y: 0, z: 0 } },
+          { key: "Direction", label: "2. Direction (Turret Heading)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
+          { key: "Latitude", label: "3. Latitude (Pitch)", suffix: "_Latitude", parentSuffix: "_Position", defaultOffset: { x: 0, y: 0, z: 5.0 } },
+          { key: "Barrel", label: "4. Barrel (Recoil)", suffix: "_Barrel", parentSuffix: "_Latitude", defaultOffset: { x: 0, y: 0, z: 0 } },
+          { key: "Muzzle", label: "5. Muzzle (Projectile)", suffix: "_Muzzle", parentSuffix: "_Barrel", defaultOffset: { x: 0, y: 5.0, z: 0 } },
+          { key: "Rest", label: "6. Rest (Idle)", suffix: "_Rest", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
         ];
       } else if (groupType === "hardpoint_group") {
         jointSpecs = [
@@ -927,6 +939,8 @@ export const Inspector: React.FC<InspectorProps> = ({
       const nav = model.nav_lights.find(n => n.name === selectedNode.name);
       if (!nav) return <div style={{ color: "var(--text-muted)", textAlign: "center" }}>NavLight not found</div>;
 
+      const underlyingJoint = model.joints.find(j => j.name === selectedNode.name);
+
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div>
@@ -940,6 +954,72 @@ export const Inspector: React.FC<InspectorProps> = ({
           </div>
 
           <hr style={{ border: "none", borderTop: "1px solid var(--border-color)", margin: 0 }} />
+
+          {underlyingJoint && (
+            <div>
+              <label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>Root Coordinate (Underlying Joint)</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "10px", color: "var(--text-muted)", marginBottom: "2px" }}>X</label>
+                  <NumericInput
+                    step="0.1"
+                    value={underlyingJoint.position?.x ?? underlyingJoint.local_transform.m[3][0]}
+                    onChange={(val) => {
+                      const v = parseFloat(val) || 0;
+                      const jIdx = model.joints.findIndex(j => j.name === underlyingJoint.name);
+                      if (jIdx === -1) return;
+                      const newJoints = [...model.joints];
+                      const j = { ...newJoints[jIdx] };
+                      j.position = { ...(j.position || {x:0,y:0,z:0}), x: v };
+                      j.local_transform.m[3][0] = v;
+                      newJoints[jIdx] = j;
+                      onModelChange?.({ ...model, joints: newJoints });
+                    }}
+                    style={{ fontSize: "12px" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "10px", color: "var(--text-muted)", marginBottom: "2px" }}>Y</label>
+                  <NumericInput
+                    step="0.1"
+                    value={underlyingJoint.position?.y ?? underlyingJoint.local_transform.m[3][1]}
+                    onChange={(val) => {
+                      const v = parseFloat(val) || 0;
+                      const jIdx = model.joints.findIndex(j => j.name === underlyingJoint.name);
+                      if (jIdx === -1) return;
+                      const newJoints = [...model.joints];
+                      const j = { ...newJoints[jIdx] };
+                      j.position = { ...(j.position || {x:0,y:0,z:0}), y: v };
+                      j.local_transform.m[3][1] = v;
+                      newJoints[jIdx] = j;
+                      onModelChange?.({ ...model, joints: newJoints });
+                    }}
+                    style={{ fontSize: "12px" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "10px", color: "var(--text-muted)", marginBottom: "2px" }}>Z</label>
+                  <NumericInput
+                    step="0.1"
+                    value={underlyingJoint.position?.z ?? underlyingJoint.local_transform.m[3][2]}
+                    onChange={(val) => {
+                      const v = parseFloat(val) || 0;
+                      const jIdx = model.joints.findIndex(j => j.name === underlyingJoint.name);
+                      if (jIdx === -1) return;
+                      const newJoints = [...model.joints];
+                      const j = { ...newJoints[jIdx] };
+                      j.position = { ...(j.position || {x:0,y:0,z:0}), z: v };
+                      j.local_transform.m[3][2] = v;
+                      newJoints[jIdx] = j;
+                      onModelChange?.({ ...model, joints: newJoints });
+                    }}
+                    style={{ fontSize: "12px" }}
+                  />
+                </div>
+              </div>
+              <hr style={{ border: "none", borderTop: "1px solid var(--border-color)", margin: "12px 0 0 0" }} />
+            </div>
+          )}
 
           <div>
             <label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>Section ID</label>
@@ -1764,6 +1844,9 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
           </div>
           <div>
+            <div style={{ padding: "8px 12px", background: "rgba(22, 160, 255, 0.05)", borderLeft: "3px solid var(--accent-cyan)", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "12px", borderRadius: "0 4px 4px 0", lineHeight: "1.4" }}>
+              💡 <b>Note:</b> The base position of this Engine Burn is governed by its <b>Parent Joint</b>. The <b>Burn Vertices</b> below represent the individual flame coordinates relative to that parent joint.
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
               <div style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "500" }}>Burn Vertices ({burn.vertices.length})</div>
               <button

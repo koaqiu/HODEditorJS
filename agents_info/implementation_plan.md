@@ -1,141 +1,55 @@
-# Implementation Plan: Animation Editor — Full UI (Phase 3.5)
+# Goal Description
 
-## Background
+Finish the reverse-engineered `generate_v2_from_model` to make it a fully lossless editor for HOD 2.0 files. This requires preserving the unparsed/unsupported chunks (like `KDOP`, `COLD`, `SCAR`, `INFO`) and perfectly re-compressing the original texture payload back into the new `POOL` chunk.
 
-The backend pipeline for animations is complete — the Rust parser loads `.mad` companion files and embedded `KEYF` tracks, and the data flows into `HODModel.animations`. The user can see the "Animations" tab in the sidebar and the loaded animation name appears there.
+## Ultimate Goal of the project
 
-**What the user sees today:**
-- ✅ Animations tab in the sidebar lists animation names, track count, total keyframes, joint channel names
-- ✅ A slim timeline bar floats at the bottom of the viewport with Play/Stop, a scrubber, an animation dropdown, and buttons: "New Anim", "Add Track...", "Add Keyframe", "Compile .MAD"
-- ✅ A pulsing green badge at the top says "N Animations Loaded — Use Timeline Below ↓"
+This app is going to be a full Homeworld 2 Remastered HOD 2.0 editor/creator, aside from the current functionalities, it should be able to:
+- Load an HOD 2.0 file at full and correctly interpret it (should be already done).
+- On a save, it will create a new HOD 2.0 from scratch (reversed engineered logic) and must be precise (loading an existing HOD 2.0 file and saving it should output a new file created from scratch by the app that is identical, not just patch it).
+- Create a HOD 2.0 file from scratch as a proper editor for new ships creation after saving.
+- Load HOD 1.0 and process them as a new HOD 2.0 file (editor reflects the loaded data on any HOD type or DAE files, as a base data structure).
+- Load / import .DAE files compatible that reflect a HOD correctly.
 
-**What the user CANNOT see/do:**
-- ❌ The viewport timeline bar is not visible — it's there but completely hidden because its `bottom: 16px` position is **clipped by the parent container's `overflow: hidden`** or sits behind the inspector panel on narrow layouts
-- ❌ No visual timeline showing keyframes as markers on a horizontal ruler (like a real NLE/DCC)
-- ❌ Cannot delete animations or rename them from the sidebar
-- ❌ Cannot delete keyframes or edit keyframe values (time, position, rotation)
-- ❌ Cannot delete animation tracks
-- ❌ No loop toggle or playback speed controls
-- ❌ The "Compile .MAD" button outputs a plain-text stub, not the real binary IFF `.mad` format
-- ❌ No visual graph/curve editor for animation channels
-- ❌ No indication of which joint is animating while playing (highlighted joint)
+### Permanent Context & Reference Data
+- **SCAR:** Represents battle scars in Homeworld 2 Remastered.
+- **Collision Mesh (COLD/KDOP):** A special node that isn't strictly necessary for a HOD to run, it is optionally added into it.
+- **HODOR/RODOH scripts:** Found at `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/HODOR/`. These are the official tools that convert HOD 1.0 -> .DAE -> HOD 2.0. We are **reverse engineering** the creation of HOD 2.0 files.
 
----
-
-## Root Cause: Timeline Bar Invisible
-
-The floating timeline panel at `bottom: 16px` inside the viewport `div` with `overflow: hidden` is likely clipped. The fix is to either:
-1. Move the animation panel **outside** the viewport container (into `App.tsx` as a dedicated horizontal dock below the viewport), or
-2. Change the viewport container to `overflow: visible` (but this breaks the clip mask for 3D canvas).
-
-**Chosen approach**: Extract the animation panel from `Viewport.tsx` and render it as a **dedicated animation dock row** in `App.tsx`, sandwiched between the viewport and the inspector bottom edge. This guarantees it's always visible and avoids overflow clipping.
-
----
+- Create a dedicated walkthrough file (specific naming to the plan) where you add all steps currently done, in case of any interruptions that a new agent has to take over to continue the work seamlessly. This is important else the new agent will end up working on something else. "hod2_serialization_walkthrough.md"
 
 ## Proposed Changes
 
-### Phase 3.5-A: Make the Timeline Panel Always Visible
+### Backend Compiler (parser/src/hod.rs)
 
-#### [MODIFY] [App.tsx](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/src/App.tsx)
-- Add `showAnimBar: boolean` state (true when `model?.animations?.length > 0`).
-- Render a new `<AnimationDock>` component **below** the `<Viewport>` row in the main layout flex column, instead of inside the viewport.
-- Pass it: `model`, `selectedAnimIdx`, `setSelectedAnimIdx`, `isPlaying`, `setIsPlaying`, `currentTime`, `setCurrentTime`, `onModelChange`.
+#### [MODIFY] `hod.rs`
+- **Modify `generate_v2_from_model` Signature:** Update it to `pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result<Vec<u8>, String>`.
+- **Extract Textures:** At the start of the function, parse `original_bytes` (if not empty) using `IffChunk::read_chunk`. Locate the original `POOL` chunk, decompress it using `xpress::decompress`, and extract the exact `original_texture_pool` payload. Pass this into `generate_pool_data` instead of an empty buffer.
+- **Preserve Unparsed Chunks:** 
+  - Parse the tree of `original_bytes`.
+  - For the **DTRM** container: Instead of manually creating a new `DTRM` chunk with only `HIER`, `MRKR`, and `BURN`, iterate over the original `DTRM` children. Replace the matched chunks (`HIER`, `MRKR`, `BURN`) with the newly compiled ones from `model`, and append all other unrecognized chunks (`KDOP`, `COLD`, `SCAR`, `NAVL`, etc.) exactly as they were.
+  - For the **HVMD** container: Do the same, replacing `STAT` and `MULT` but preserving others.
+  - For the **Root** container: Replace `VERS`, `NAME`, `POOL`, `HVMD`, and `DTRM`, but push any remaining chunks (like `INFO`) to the end.
 
-#### [NEW] [AnimationDock.tsx](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/src/components/AnimationDock.tsx)
-A dedicated horizontal bar that spans the full width below the 3D viewport. Contains:
+### Tauri App (src-tauri/src/lib.rs)
 
-**Left cluster:**
-- ⏮ Rewind to 0 button
-- ▶/⏸ Play/Pause toggle button
-- ⏹ Stop (reset to 0) button
-- 🔁 Loop toggle button (loops playback when enabled)
-- Speed selector: `0.25x`, `0.5x`, `1.0x`, `2.0x`
-
-**Center cluster:**
-- Animation name dropdown (`<select>` mapped to `selectedAnimIdx`)
-- Time readout: `0.00s / 4.00s`
-- ➕ New Animation button (opens create modal)
-- 🗑 Delete Animation button (with confirmation)
-
-**Right cluster:**
-- Add Track dropdown (`<select>` of joints not yet in the active anim)
-- Add Keyframe button (requires a joint to be selected in the hierarchy)
-- 💾 Compile .MAD button (calls existing `handleCompileToMAD`)
-
-**Timeline ruler row (below controls):**
-- A full-width horizontal ruler showing:
-  - Time ticks (0.0s, 0.5s, 1.0s … up to `duration`)
-  - A draggable **playhead** red line at `currentTime`
-  - For the active animation: one row per track, with **diamond keyframe markers** clickable to select/delete
-
-Remove the old animation panel JSX from `Viewport.tsx` entirely.
-
----
-
-### Phase 3.5-B: Sidebar Animations Tab — Edit Controls
-
-#### [MODIFY] [HierarchyTree.tsx](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/src/components/HierarchyTree.tsx)
-
-Extend the Animations tab to add:
-1. **Per-animation rename**: an inline text field (clicking animation name switches to edit mode).
-2. **Per-animation delete**: a `🗑` icon button on hover next to the animation name.
-3. **Per-track delete**: a `×` icon button on each joint channel row.
-4. **Per-keyframe delete**: right-click or a `×` button on each `0.00s` keyframe badge.
-5. **Keyframe value inspector**: clicking a keyframe badge expands an inline read-only table showing `time`, `pos [x, y, z]`, `rot [x, y, z, w]`.
-
-All edit operations call `onModelChange(updatedModel)` to mutate through the standard state pipeline.
-
-Props to add to `HierarchyTreeProps`:
-```ts
-onModelChange?: (m: HODModel) => void;
-currentTime?: number;
-```
-
----
-
-### Phase 3.5-C: Playback Improvements
-
-#### [MODIFY] [Viewport.tsx](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/src/components/Viewport.tsx)
-- Remove the old animation panel JSX (moved to `AnimationDock`).
-- Keep the internal `evaluateAnimation` logic and the `isPlaying`/`currentTime` render-loop update.
-- Accept new props: `isPlaying`, `setIsPlaying`, `currentTime`, `setCurrentTime`, `playbackSpeed`, `loopPlayback` from `App.tsx` (lifted up).
-- **Highlight animated joint**: When `isPlaying`, change the material color of any joint sphere in `jointsGroup` whose name appears in the active animation's tracks to a brighter green.
-
-#### [MODIFY] [App.tsx](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/src/App.tsx)
-- Lift `isPlaying`, `currentTime`, `playbackSpeed`, `loopPlayback` state up from `Viewport` into `App.tsx`.
-- Pass them down into both `<Viewport>` and `<AnimationDock>`.
-
----
-
-### Phase 3.5-D: Compile .MAD — Real Binary Output (Stretch Goal)
-
-#### [MODIFY] [hod.rs](file:///run/media/system/Data/SteamLibrary/steamapps/common/Homeworld%20347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/parser/src/hod.rs)
-- Add a Tauri command `compile_mad_from_anims` that accepts the `HODModel` JSON, and writes a real binary `.mad` IFF file using the same serialization path as `save_edits` → MAD writer.
-- The "Compile .MAD" button in `AnimationDock` calls this command via `invoke("compile_mad_from_anims", ...)` instead of the current plain-text dump.
-
----
+#### [MODIFY] `lib.rs`
+- **Update `save_hod` & `save_hod_as`:** Update the calls to pass `&original_bytes` into `hwr_hod_parser::hod::generate_v2_from_model(&original_bytes, &model)`. If the file is a newly imported DAE, `original_bytes` will be safely empty.
 
 ## Verification Plan
 
-### Manual
-1. Load `ter_fenris.hod` — the AnimationDock should appear below the viewport with the "radar" animation selected.
-2. Press Play — the radar mesh rotates in the viewport while the playhead scrubs along the ruler.
-3. Press Stop — mesh resets, playhead returns to 0.
-4. Enable Loop — animation loops automatically.
-5. Click a keyframe diamond — the sidebar highlights the corresponding track and time.
-6. Delete an animation via the `🗑` button — the dropdown and sidebar update immediately.
-7. Create a new animation via "New Animation" — it appears in the dropdown.
-8. "Compile .MAD" produces a valid binary `.mad` file loadable in Homeworld Remastered.
+Run verification scripts that parse the file, reserialize it without edits, and verify that the output perfectly matches the original file format, contains the exact same bytes for untouched chunks, and maintains the full file size (lossless texture/collision mesh preservation).
 
-### Build
-- `npm run build` must produce 0 TypeScript errors.
-- `cargo build` in `parser/` must produce 0 errors.
+### Automated Tests
+I will build Rust bin targets (or update `test_pebble.rs`) to load and reserialize these files, verifying the outputs via hex comparisons (`cmp` and `hexdump`):
 
----
+1. **HOD 2.0 (pebble_0)**: `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/pebble/pebble_0/pebble_0.hod`
+   - *Test Focus*: Verify texture pool recompression matches original byte size and that `KDOP`/`INFO` chunks are preserved. Output must be equal to the input.
+2. **HOD 2.0 (ter_elysium)**: `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_elysium/ter_elysium.hod`
+   - *Test Focus*: Ensure complex multi-mesh, multi-material ships with `SCAR` and `COLD` chunks reserialize losslessly. Output must be equal to the input.
+3. **HOD 1.0 (asteroid_3)**: `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/resource/asteroid/asteroid_3/asteroid_3.hod`
+   - *Test Focus*: Ensure HOD 1.0 files trigger `save_edits` properly and still save losslessly without disruption from the V2 compiler changes.
+   **HOD 1.0 (other HOD 1.0 files to use for further testing)** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/`
+4. **.DAE (ships converted from HOD 1.0 to .DAE)**: `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/current_project_processing/ship_converted/`
+   - *Test Focus*: Ensure the app handles creating a fresh HOD file from an empty `original_bytes` buffer without crashing.
 
-## Priority Order
-
-1. **Phase 3.5-A** (AnimationDock visibility fix) — **highest priority**, user can't see the timeline at all
-2. **Phase 3.5-B** (Sidebar edit controls) — needed for delete/rename workflows
-3. **Phase 3.5-C** (Playback improvements) — quality of life
-4. **Phase 3.5-D** (Binary .MAD compile) — currently outputs a text stub; needs real binary
