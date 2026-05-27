@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { HODModel } from "./Viewport";
 import { Folder, FolderOpen, Tag, ChevronDown, ChevronRight, Search, Box, Eye, EyeOff, Radio, Activity, Shield, Flame, Palette, Crosshair, Plus, Trash2, AlertTriangle, Info } from "lucide-react";
@@ -215,9 +216,9 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     } else if (addNodeType === "collision") {
       defName = `Collision_${model.collision_meshes.length + 1}`;
     } else if (addNodeType === "weapon_template") {
-      defName = `Weapon_${getUniqueWeaponGroups().length}`;
+      defName = `Weapon_${getUniqueAssemblyGroups().length}`;
     } else if (addNodeType === "turret_template") {
-      defName = `Turret_${getUniqueWeaponGroups().length}`;
+      defName = `Turret_${getUniqueAssemblyGroups().length}`;
     } else if (addNodeType === "engine_nozzle") {
       defName = `EngineBurn${model.engine_burns.length}`;
     } else if (addNodeType === "mesh") {
@@ -255,11 +256,35 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
 
   // Weapon Grouping helpers
   const getWeaponGroupInfo = (name: string) => {
-    const match = name.match(/^(Weapon_[A-Za-z0-9_]+)_(Position|Direction|Muzzle\d*|Rest|Latitude|Pitch|Yaw|Barrel\d*)$/i);
-    return match ? { baseName: match[1], suffix: match[2] } : null;
+    // Check weapon and turret assemblies
+    const weaponMatch = name.match(/^(Weapon_[A-Za-z0-9_]+|Turret_[A-Za-z0-9_]+)_(Position|Direction|Muzzle\d*|Rest|Latitude|Pitch|Yaw|Barrel\d*)$/i);
+    if (weaponMatch) return { baseName: weaponMatch[1], suffix: weaponMatch[2], type: weaponMatch[1].startsWith('Turret') ? 'turret_group' : 'weapon_group' };
+    
+    // Check point groups (Capture, Repair, Salvage, Hardpoint)
+    const pointMatch = name.match(/^(CapturePoint\d+|RepairPoint\d+|SalvagePoint\d+|Hardpoint_\d+)_(Heading|Left|Up|Position|Direction|Rest)$/i);
+    if (pointMatch) {
+      let type = "point_group";
+      if (pointMatch[1].startsWith("Hardpoint")) type = "hardpoint_group";
+      else if (pointMatch[1].startsWith("Capture")) type = "capture_point_group";
+      else if (pointMatch[1].startsWith("Repair")) type = "repair_point_group";
+      else if (pointMatch[1].startsWith("Salvage")) type = "salvage_point_group";
+      return { baseName: pointMatch[1], suffix: pointMatch[2], type };
+    }
+    
+    // Check base nodes for point groups (they don't always have a suffix for the root)
+    const exactPointMatch = name.match(/^(CapturePoint\d+|RepairPoint\d+|SalvagePoint\d+)$/i);
+    if (exactPointMatch) {
+      let type = "point_group";
+      if (exactPointMatch[1].startsWith("Capture")) type = "capture_point_group";
+      else if (exactPointMatch[1].startsWith("Repair")) type = "repair_point_group";
+      else if (exactPointMatch[1].startsWith("Salvage")) type = "salvage_point_group";
+      return { baseName: exactPointMatch[1], suffix: "", type };
+    }
+
+    return null;
   };
 
-  const getUniqueWeaponGroups = (): string[] => {
+  const getUniqueAssemblyGroups = (): string[] => {
     if (!model) return [];
     const groups = new Set<string>();
     model.joints.forEach(j => {
@@ -276,6 +301,25 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     const name = newNodeName.trim();
     const parent = newNodeParent === "Root" ? "Root" : newNodeParent;
 
+    
+    const checkDuplicate = (n: string) => {
+      if (model.joints.some(j => j.name === n)) return true;
+      if (model.meshes.some(m => `${m.name}_lod_${m.lod}` === n || m.name === n)) return true;
+      if (model.nav_lights.some(nv => nv.name === n)) return true;
+      if (model.markers.some(m => m.name === n)) return true;
+      if (model.engine_burns?.some(b => b.name === n)) return true;
+      if (model.engine_glows?.some(g => g.name === n)) return true;
+      if (model.engine_shapes?.some(s => s.name === n)) return true;
+      if (model.collision_meshes?.some(c => c.name === n)) return true;
+      if (model.dockpaths?.some(d => d.name === n)) return true;
+      return false;
+    };
+
+    if (checkDuplicate(name)) {
+      window.alert(`A node with the name "${name}" already exists! Please choose a unique name.`);
+      return;
+    }
+    
     let updatedModel = { ...model };
 
     if (addNodeType === "joint") {
@@ -888,7 +932,166 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     );
   };
 
-  const handleDeleteNode = (name: string, type: string) => {
+  
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, name: string, type: string } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent, name: string, type: string) => {
+    if (type === "joint") {
+      const wInfo = getWeaponGroupInfo(name);
+      if (wInfo && name !== wInfo.baseName) {
+        // It's a subnode of an assembly, prevent context menu
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedNode({ type, name });
+    setContextMenu({ x: e.clientX, y: e.clientY, name, type });
+  };
+
+  const handleRenameNode = (oldName: string, type: string) => {
+    if (!model) return;
+    
+    let cleanOldName = oldName;
+    let prefix = "";
+    let suffix = "";
+    
+    if (type === "navlight" && oldName.startsWith("NAVL[")) {
+      prefix = "NAVL["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    } else if (type === "marker" && oldName.startsWith("MARK[")) {
+      prefix = "MARK["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    } else if (type === "engine_burn" && oldName.startsWith("BURN[")) {
+      prefix = "BURN["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    } else if (type === "mesh" && oldName.startsWith("MULT[")) {
+      prefix = "MULT["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    } else if (type === "collision" && oldName.startsWith("COL[")) {
+      prefix = "COL["; suffix = "]"; cleanOldName = oldName.substring(4, oldName.length - 1);
+    } else if (type === "engine_glow" && oldName.startsWith("GLOW[")) {
+      prefix = "GLOW["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    } else if (type === "engine_shape" && oldName.startsWith("SHAP[")) {
+      prefix = "SHAP["; suffix = "]"; cleanOldName = oldName.substring(5, oldName.length - 1);
+    }
+
+    const input = window.prompt(`Rename ${type}:`, cleanOldName);
+    if (!input || input.trim() === "" || input === cleanOldName) return;
+    
+    const newName = `${prefix}${input.trim()}${suffix}`;
+    
+    const checkDuplicate = (n: string) => {
+      if (model.joints.some(j => j.name === n)) return true;
+      if (model.meshes.some(m => `${m.name}_lod_${m.lod}` === n || m.name === n)) return true;
+      if (model.nav_lights.some(nv => nv.name === n)) return true;
+      if (model.markers.some(m => m.name === n)) return true;
+      if (model.engine_burns?.some(b => b.name === n)) return true;
+      if (model.engine_glows?.some(g => g.name === n)) return true;
+      if (model.engine_shapes?.some(s => s.name === n)) return true;
+      if (model.collision_meshes?.some(c => c.name === n)) return true;
+      if (model.dockpaths?.some(d => d.name === n)) return true;
+      return false;
+    };
+    
+    let updatedModel = { ...model };
+
+    if (type === "weapon_group") {
+      const groupJoints = model.joints.filter(j => j.name.toLowerCase().startsWith(oldName.toLowerCase() + "_") || j.name.toLowerCase() === oldName.toLowerCase());
+      
+      for (const j of groupJoints) {
+         const renamed = j.name.replace(oldName, newName);
+         if (checkDuplicate(renamed)) {
+            window.alert(`Cannot rename weapon assembly: Subnode "${renamed}" would conflict with an existing node!`);
+            return;
+         }
+      }
+
+      updatedModel.joints = model.joints.map(j => {
+        if (groupJoints.some(gj => gj.name === j.name)) {
+          return { ...j, name: j.name.replace(oldName, newName), parent_name: j.parent_name ? j.parent_name.replace(oldName, newName) : "Root" };
+        }
+        return { ...j, parent_name: j.parent_name ? j.parent_name.replace(oldName, newName) : "Root" };
+      });
+      updatedModel.meshes = model.meshes.map(m => ({ ...m, parent_name: m.parent_name ? m.parent_name.replace(oldName, newName) : "Root" }));
+      updatedModel.markers = model.markers.map(m => ({ ...m, parent_joint: m.parent_joint.replace(oldName, newName) }));
+      
+      onModelChange?.(updatedModel);
+      if (selectedNode && selectedNode.name === oldName && selectedNode.type === type) {
+        setSelectedNode({ type, name: newName });
+      }
+      invoke("log_event", { level: "INFO", message: `Renamed weapon_group assembly from ${oldName} to ${newName}` }).catch(console.error);
+      return;
+    }
+
+    if (checkDuplicate(newName)) {
+      window.alert(`A node with the name "${newName}" already exists!`);
+      return;
+    }
+
+    if (type === "joint") {
+      updatedModel.joints = model.joints.map(j => {
+        if (j.name === oldName) return { ...j, name: newName };
+        if (j.parent_name === oldName) return { ...j, parent_name: newName };
+        return j;
+      });
+      updatedModel.markers = model.markers.map(m => {
+        if (m.parent_joint === oldName) return { ...m, parent_joint: newName };
+        return m;
+      });
+      updatedModel.meshes = model.meshes.map(m => {
+        if (m.parent_name === oldName) return { ...m, parent_name: newName };
+        return m;
+      });
+      updatedModel.dockpaths = model.dockpaths.map(dp => {
+        if (dp.parent_name === oldName) return { ...dp, parent_name: newName };
+        return dp;
+      });
+      updatedModel.engine_burns = model.engine_burns.map(eb => {
+        if (eb.parent_name === oldName) return { ...eb, parent_name: newName };
+        return eb;
+      });
+      updatedModel.engine_glows = model.engine_glows.map(eg => {
+        if (eg.parent_name === oldName) return { ...eg, parent_name: newName };
+        return eg;
+      });
+      updatedModel.engine_shapes = model.engine_shapes.map(es => {
+        if (es.parent_name === oldName) return { ...es, parent_name: newName };
+        return es;
+      });
+      updatedModel.collision_meshes = model.collision_meshes.map(c => {
+        if (c.mesh && c.mesh.parent_name === oldName) {
+           return { ...c, mesh: { ...c.mesh, parent_name: newName } };
+        }
+        return c;
+      });
+    } else if (type === "marker") {
+      updatedModel.markers = model.markers.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "navlight") {
+      updatedModel.nav_lights = model.nav_lights.map(m => m.name === oldName ? { ...m, name: newName } : m);
+      updatedModel.joints = model.joints.map(j => j.name === oldName ? { ...j, name: newName } : j);
+    } else if (type === "dockpath") {
+      updatedModel.dockpaths = model.dockpaths.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "collision") {
+      updatedModel.collision_meshes = model.collision_meshes.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "engine_burn") {
+      updatedModel.engine_burns = model.engine_burns.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "engine_glow") {
+      updatedModel.engine_glows = model.engine_glows.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "engine_shape") {
+      updatedModel.engine_shapes = model.engine_shapes.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "mesh") {
+      updatedModel.meshes = model.meshes.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    } else if (type === "material") {
+      updatedModel.materials = model.materials.map(m => m.name === oldName ? { ...m, name: newName } : m);
+    }
+    
+    onModelChange?.(updatedModel);
+    if (selectedNode && selectedNode.name === oldName && selectedNode.type === type) {
+      setSelectedNode({ type, name: newName });
+    }
+    invoke("log_event", { level: "INFO", message: `Renamed ${type} from ${oldName} to ${newName}` }).catch(console.error);
+  };
+
+const handleDeleteNode = (name: string, type: string) => {
     if (!model || !isNodeDeletable(name, type)) return;
     
     let updatedModel = { ...model };
@@ -1189,7 +1392,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     const warnings: { type: "warning" | "info"; message: string }[] = [];
     if (!model) return warnings;
 
-    const uniqueGroups = getUniqueWeaponGroups();
+    const uniqueGroups = getUniqueAssemblyGroups();
     uniqueGroups.forEach(baseName => {
       const required = ["Position", "Direction", "Muzzle", "Rest"];
       const missing: string[] = [];
@@ -1268,7 +1471,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
       return true;
     });
     
-    const childWeaponGroups = getUniqueWeaponGroups().filter(baseName => {
+    const childWeaponGroups = getUniqueAssemblyGroups().filter(baseName => {
       const groupJoints = model.joints.filter(j => j.name.toLowerCase().startsWith(baseName.toLowerCase() + "_"));
       return groupJoints.some(j => {
         const hasParentInGroup = groupJoints.some(other => other.name === j.parent_name);
@@ -1310,7 +1513,8 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
         <div
           className={`list-item ${isSelected ? "active" : ""}`}
           onClick={() => setSelectedNode({ type: "joint", name: jointName })}
-          draggable={jointName !== "Root" ? "true" : "false"}
+          onContextMenu={(e) => handleContextMenu(e, jointName, "joint")}
+          draggable={jointName !== "Root" && !(getWeaponGroupInfo(jointName) && jointName !== getWeaponGroupInfo(jointName)?.baseName) ? "true" : "false"}
           onDragStart={(e) => {
             if (jointName === "Root") {
               e.preventDefault();
@@ -1376,6 +1580,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={marker.name}
                   className={`list-item ${isMarkerSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "marker", name: marker.name })}
+                  onContextMenu={(e) => handleContextMenu(e, marker.name, "marker")}
                   draggable="true"
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1413,6 +1618,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={meshKey}
                   className={`list-item ${isMeshSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "mesh", name: meshKey })}
+                  onContextMenu={(e) => handleContextMenu(e, meshKey, "mesh")}
                   draggable="true"
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1449,6 +1655,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={nav.name}
                   className={`list-item ${isNavSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "navlight", name: nav.name })}
+                  onContextMenu={(e) => handleContextMenu(e, nav.name, "navlight")}
                   draggable="true"
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1485,6 +1692,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={burn.name}
                   className={`list-item ${isBurnSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "engine_burn", name: burn.name })}
+                  onContextMenu={(e) => handleContextMenu(e, burn.name, "engine_burn")}
                   draggable="true"
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -1521,6 +1729,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={glow.name}
                   className={`list-item ${isGlowSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "engine_glow", name: glow.name })}
+                  onContextMenu={(e) => handleContextMenu(e, glow.name, "engine_glow")}
                   style={{ 
                     paddingLeft: "16px",
                     display: "flex",
@@ -1552,6 +1761,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={shape.name}
                   className={`list-item ${isShapeSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "engine_shape", name: shape.name })}
+                  onContextMenu={(e) => handleContextMenu(e, shape.name, "engine_shape")}
                   style={{ 
                     paddingLeft: "16px",
                     display: "flex",
@@ -1583,6 +1793,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   key={col.name}
                   className={`list-item ${isColSelected ? "active" : ""}`}
                   onClick={() => setSelectedNode({ type: "collision", name: col.name })}
+                  onContextMenu={(e) => handleContextMenu(e, col.name, "collision")}
                   style={{ 
                     paddingLeft: "16px",
                     display: "flex",
@@ -1614,6 +1825,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                   <div
                     className={`list-item ${isPathSelected ? "active" : ""}`}
                     onClick={() => setSelectedNode({ type: "dockpath", name: path.name })}
+                  onContextMenu={(e) => handleContextMenu(e, path.name, "dockpath")}
                   style={{ 
                     paddingLeft: "16px",
                     display: "flex",
@@ -1656,7 +1868,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
             })}
 
             {/* Render child weapon groups */}
-            {childWeaponGroups.map((baseName) => renderWeaponGroupNode(baseName, depth + 1))}
+            {childWeaponGroups.map((baseName) => renderAssemblyNode(baseName, depth + 1))}
 
             {/* Recursively render child joints */}
             {standardChildJoints.map((child) => renderJointNode(child.name, depth + 1, nextVisited))}
@@ -1666,7 +1878,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     );
   };
 
-  const renderWeaponGroupNode = (baseName: string, depth: number): React.ReactNode => {
+  const renderAssemblyNode = (baseName: string, depth: number): React.ReactNode => {
     const isSelected = selectedNode?.type === "weapon_group" && selectedNode.name === baseName;
     const isCollapsed = !!collapsedJoints[`weapon_group:${baseName}`];
 
@@ -1685,13 +1897,14 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     if (searchTerm && !matchesSearch) return null;
 
     // Detect if this is a Turret vs standard Weapon
-    const isTurret = baseName.toLowerCase().includes("turret") || groupJoints.some(j => j.name.toLowerCase().includes("turret"));
+    // const _isTurret = baseName.toLowerCase().includes("turret") || groupJoints.some(j => j.name.toLowerCase().includes("turret"));
 
     return (
       <div key={`weapon_group:${baseName}`} style={{ marginLeft: depth > 0 ? "12px" : "0px" }}>
         <div
           className={`list-item ${isSelected ? "active" : ""}`}
           onClick={() => setSelectedNode({ type: "weapon_group", name: baseName })}
+          onContextMenu={(e) => handleContextMenu(e, baseName, "weapon_group")}
           style={{
             paddingLeft: "4px",
             display: "flex",
@@ -1709,7 +1922,14 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
             )}
             <Crosshair size={14} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: "600" }}>
-              {isTurret ? "Turret: " : "Weapon: "}{baseName}
+              {(() => {
+                const info = getWeaponGroupInfo(baseName + "_Position") || getWeaponGroupInfo(baseName + "_Heading") || getWeaponGroupInfo(baseName);
+                const type = info?.type || "weapon_group";
+                if (type === "turret_group") return "Turret: " + baseName;
+                if (type === "weapon_group") return "Weapon: " + baseName;
+                if (type === "hardpoint_group") return "Hardpoint: " + baseName;
+                return "Point: " + baseName;
+              })()}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -1745,7 +1965,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   }) || [];
 
   // Find root weapon groups (groups whose top-most parent is null, or parentless)
-  const rootWeaponGroups = getUniqueWeaponGroups().filter(baseName => {
+  const rootWeaponGroups = getUniqueAssemblyGroups().filter(baseName => {
     const groupJoints = model.joints.filter(j => j.name.toLowerCase().startsWith(baseName.toLowerCase() + "_"));
     return groupJoints.some(j => {
       const hasParentInGroup = groupJoints.some(other => other.name === j.parent_name);
@@ -2033,7 +2253,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
           {activeTab === "hierarchy" ? (
             rootJoints.length > 0 || rootWeaponGroups.length > 0 || rootNavLights.length > 0 ? (
               <>
-                {rootWeaponGroups.map((baseName) => renderWeaponGroupNode(baseName, 0))}
+                {rootWeaponGroups.map((baseName) => renderAssemblyNode(baseName, 0))}
                 {rootJoints.map((root) => renderJointNode(root.name, 0))}
                 {rootNavLights.map((nav) => {
                   const isNavSelected = selectedNode?.type === "navlight" && selectedNode.name === nav.name;
@@ -2042,6 +2262,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
                       key={nav.name}
                       className={`list-item ${isNavSelected ? "active" : ""}`}
                       onClick={() => setSelectedNode({ type: "navlight", name: nav.name })}
+                  onContextMenu={(e) => handleContextMenu(e, nav.name, "navlight")}
                       draggable="true"
                       onDragStart={(e) => {
                         e.stopPropagation();
@@ -2926,6 +3147,62 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
           </div>
         </div>
       )}
+
+      {contextMenu && createPortal(
+        <>
+          <div 
+            style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9999 }} 
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div 
+            style={{
+              position: 'fixed',
+              top: contextMenu.y,
+              left: contextMenu.x,
+              zIndex: 10000,
+              background: 'var(--bg-panel)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              padding: '4px 0',
+              minWidth: '150px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div 
+              className="list-item"
+              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}
+              onClick={() => {
+                 handleRenameNode(contextMenu.name, contextMenu.type);
+                 setContextMenu(null);
+              }}
+            >
+              ✏️ Rename
+            </div>
+            {isNodeDeletable(contextMenu.name, contextMenu.type) && (
+              <div 
+                className="list-item"
+                style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#ff1744' }}
+                onClick={() => {
+                   const confirmMsg = contextMenu.type === "weapon_group" 
+                     ? `Are you sure you want to delete the entire weapon/turret family "${contextMenu.name}"? This will remove all of its component joints safely.` 
+                     : `Are you sure you want to delete "${contextMenu.name}"?`;
+                   if (window.confirm(confirmMsg)) {
+                     handleDeleteNode(contextMenu.name, contextMenu.type);
+                   }
+                   setContextMenu(null);
+                }}
+              >
+                ✕ Delete
+              </div>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
+
     </div>
   );
 };

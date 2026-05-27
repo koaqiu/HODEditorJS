@@ -64,9 +64,9 @@ function App() {
   };
   const [statusMsg, setStatusMsg] = useState("System Ready");
   const [visibleMeshes, setVisibleMeshes] = useState<Record<string, boolean>>({});
-  const [showMigrationBanner, setShowMigrationBanner] = useState(false);
   const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
-  const [migrationMappings, setMigrationMappings] = useState<Record<string, "joint" | "marker" | "weapon" | "collision">>({});
+  const [migrationMappings, setMigrationMappings] = useState<Record<string, "joint" | "marker" | "weapon" | "collision" | "navlight" | "engine_burn" | "engine_glow">>({});
+  const [migrationCoordinateClones, setMigrationCoordinateClones] = useState<Record<string, string>>({});
 
   // Big Data Settings and Toggling states
   const [showNavLights, setShowNavLights] = useState(true);
@@ -107,6 +107,42 @@ function App() {
       }
     } catch (e: any) {
       const err = "Failed to open file dialog: " + e.toString();
+      invoke("log_event", { level: "ERROR", message: err }).catch(console.error);
+      setErrorMsg(err);
+      setStatusMsg("File browser error");
+    }
+  };
+
+  // Open native OS file selector dialog for DAE
+  const selectAndImportDAE = async () => {
+    if (isDirty) {
+      const confirmDiscard = window.confirm("You have unsaved changes. Are you sure you want to load another model and discard your changes?");
+      if (!confirmDiscard) return;
+    }
+    try {
+      const selectedPath = await invoke<string | null>("select_dae_file");
+      if (selectedPath) {
+        setStatusMsg("Parsing DAE file...");
+        setIsLoading(true);
+        setErrorMsg(null);
+        try {
+          const parsedModel = await invoke<HODModel>("import_dae_file", { path: selectedPath });
+          setModel(parsedModel);
+          setFilePath(""); // No original path, it's newly imported
+          setIsDirty(true);
+          setSelectedNode(null);
+          setStatusMsg("Successfully imported DAE as HOD 2.0");
+        } catch (e: any) {
+          const err = "Failed to import DAE: " + e.toString();
+          invoke("log_event", { level: "ERROR", message: err }).catch(console.error);
+          setErrorMsg(err);
+          setStatusMsg("Import error");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    } catch (e: any) {
+      const err = "Failed to open DAE file dialog: " + e.toString();
       invoke("log_event", { level: "ERROR", message: err }).catch(console.error);
       setErrorMsg(err);
       setStatusMsg("File browser error");
@@ -208,11 +244,23 @@ function App() {
     };
   };
 
+  const resetUIState = () => {
+    setModel(null);
+    setSelectedNode(null);
+    setSelectedAnimIdx(0);
+    setTargetBoxes([]);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setVisibleMeshes({});
+    setMigrationMappings({});
+    setErrorMsg(null);
+  };
+
   // Load targeted HOD file from absolute filesystem path
   const loadHODFile = async (path: string) => {
     if (!path.trim()) return;
+    resetUIState();
     setIsLoading(true);
-    setErrorMsg(null);
     setStatusMsg("Loading HOD...");
     
     // Give the browser 100ms of breathing room to paint the gorgeous loading overlay!
@@ -234,7 +282,98 @@ function App() {
           dockpaths: parsedModel.dockpaths || [],
         };
 
-        const finalizedModel = autoCreateCollisionMesh(processedModel);
+        const sanitizeNavLightChildren = (loadedModel: HODModel): HODModel => {
+          let m = { ...loadedModel };
+          const navlightNames = new Set(m.nav_lights.map(n => n.name));
+          if (navlightNames.size === 0) return m;
+
+          const getNavlightInfo = (navName: string) => {
+            const joint = m.joints.find(j => j.name === navName);
+            return {
+              joint,
+              parentName: joint?.parent_name || "Root",
+              transform: joint?.local_transform || { m: [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]] }
+            };
+          };
+
+          m.joints = m.joints.map(j => {
+            if (j.parent_name && navlightNames.has(j.parent_name)) {
+              const info = getNavlightInfo(j.parent_name);
+              const parentMat = info.transform.m;
+              const childMat = j.local_transform.m;
+              const newMat = [
+                [0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]
+              ];
+              for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                  newMat[r][c] = parentMat[r][0]*childMat[0][c] + parentMat[r][1]*childMat[1][c] + parentMat[r][2]*childMat[2][c] + parentMat[r][3]*childMat[3][c];
+                }
+              }
+              return {
+                ...j,
+                parent_name: info.parentName,
+                local_transform: { m: newMat }
+              };
+            }
+            return j;
+          });
+
+          const createProxyJoint = (childName: string, navName: string, prefix: string) => {
+            const info = getNavlightInfo(navName);
+            const newJointName = `${prefix}_${childName}_from_${navName}`;
+            if (!m.joints.some(j => j.name === newJointName)) {
+              m.joints.push({
+                name: newJointName,
+                parent_name: info.parentName,
+                local_transform: JSON.parse(JSON.stringify(info.transform))
+              });
+              invoke("log_event", { level: "INFO", message: `Sanitized: Created proxy joint ${newJointName} to decouple ${childName} from navlight ${navName}` }).catch(console.error);
+            }
+            return newJointName;
+          };
+
+          m.engine_burns = m.engine_burns.map(b => {
+            if (navlightNames.has(b.parent_name)) return { ...b, parent_name: createProxyJoint(b.name, b.parent_name, "BurnProxy") };
+            return b;
+          });
+
+          m.engine_glows = m.engine_glows.map(g => {
+            if (navlightNames.has(g.parent_name)) return { ...g, parent_name: createProxyJoint(g.name, g.parent_name, "GlowProxy") };
+            return g;
+          });
+
+          m.engine_shapes = m.engine_shapes.map(s => {
+            if (navlightNames.has(s.parent_name)) return { ...s, parent_name: createProxyJoint(s.name, s.parent_name, "ShapeProxy") };
+            return s;
+          });
+
+          m.meshes = m.meshes.map(mesh => {
+            if (navlightNames.has(mesh.parent_name)) return { ...mesh, parent_name: createProxyJoint(mesh.name, mesh.parent_name, "MeshProxy") };
+            return mesh;
+          });
+
+          m.markers = m.markers.map(mrk => {
+            if (navlightNames.has(mrk.parent_joint)) return { ...mrk, parent_joint: createProxyJoint(mrk.name, mrk.parent_joint, "MarkerProxy") };
+            return mrk;
+          });
+          
+          m.dockpaths = m.dockpaths.map(dp => {
+            if (navlightNames.has(dp.parent_name)) return { ...dp, parent_name: createProxyJoint(dp.name, dp.parent_name, "DockpathProxy") };
+            return dp;
+          });
+
+          m.collision_meshes = m.collision_meshes.map(col => {
+            if (col.mesh && navlightNames.has(col.mesh.parent_name)) {
+              return { ...col, mesh: { ...col.mesh, parent_name: createProxyJoint(col.name, col.mesh.parent_name, "CollisionProxy") } };
+            }
+            return col;
+          });
+
+          return m;
+        };
+
+        const sanitizedModel = sanitizeNavLightChildren(processedModel);
+        const finalizedModel = autoCreateCollisionMesh(sanitizedModel);
         setModel(finalizedModel);
         setIsDirty(false);
         setSelectedNode(null);
@@ -247,7 +386,6 @@ function App() {
           initialVisibility[`${m.name}_lod_${m.lod}`] = m.lod === 0;
         });
         setVisibleMeshes(initialVisibility);
-        setShowMigrationBanner(!finalizedModel.is_v2);
 
         setStatusMsg(`HOD ${finalizedModel.name} loaded successfully | Meshes: ${finalizedModel.meshes.length} | Joints: ${finalizedModel.joints.length} | Markers: ${finalizedModel.markers.length}`);
       } catch (e: any) {
@@ -267,6 +405,7 @@ function App() {
       if (!confirmDiscard) return;
     }
     invoke("log_event", { level: "INFO", message: "Creating fresh, clean HOD 2.0 template..." }).catch(console.error);
+    resetUIState();
     
     const newModel: HODModel = {
       version: 2000,
@@ -299,14 +438,13 @@ function App() {
       animations: []
     };
     
-    setModel(newModel);
-    setIsDirty(false);
-    setFilePath("");
-    setSelectedNode(null);
-    setSelectedAnimIdx(0);
-    setVisibleMeshes({});
-    setShowMigrationBanner(false);
-    setStatusMsg("Created fresh, clean HOD 2.0 template!");
+    // Slight delay to ensure React unmounts previous Viewport and clears WebGL context
+    setTimeout(() => {
+      setModel(newModel);
+      setFilePath("");
+      setIsDirty(false);
+      setStatusMsg("New HOD model successfully initialized!");
+    }, 50);
   };
 
   const handleExecuteMigration = () => {
@@ -315,12 +453,31 @@ function App() {
     let updatedJoints = [...model.joints];
     let updatedMarkers = [...model.markers];
     let updatedCollisions = [...model.collision_meshes];
+    let updatedNavlights = [...model.nav_lights];
+    let updatedEngineBurns = [...model.engine_burns];
+    let updatedEngineGlows = [...model.engine_glows];
     
     // Process reclassifications
     Object.entries(migrationMappings).forEach(([jointName, targetType]) => {
+      // Find the original joint being mapped
+      let originalJoint = model.joints.find(j => j.name === jointName);
+      
+      // If the user requested to clone coordinates from another joint, overwrite the transform temporarily
+      const cloneTarget = migrationCoordinateClones[jointName];
+      if (cloneTarget && cloneTarget !== "Self" && originalJoint) {
+        const sourceJoint = model.joints.find(j => j.name === cloneTarget);
+        if (sourceJoint) {
+           // We clone the local_transform and position from the source joint
+           originalJoint = { 
+             ...originalJoint, 
+             local_transform: JSON.parse(JSON.stringify(sourceJoint.local_transform)),
+             position: sourceJoint.position ? { ...sourceJoint.position } : undefined,
+           };
+        }
+      }
+
       if (targetType === "marker") {
         // Convert to marker:
-        const originalJoint = model.joints.find(j => j.name === jointName);
         if (originalJoint) {
           // Decompose its transform for position:
           const m = originalJoint.local_transform.m;
@@ -344,7 +501,6 @@ function App() {
         }
       } else if (targetType === "weapon") {
         // Convert to standard 4-joint weapon assembly:
-        const originalJoint = model.joints.find(j => j.name === jointName);
         if (originalJoint) {
           const m = originalJoint.local_transform.m;
           const parent = originalJoint.parent_name || "Root";
@@ -394,7 +550,6 @@ function App() {
         }
       } else if (targetType === "collision") {
         // Convert to collision:
-        const originalJoint = model.joints.find(j => j.name === jointName);
         if (originalJoint) {
           const m = originalJoint.local_transform.m;
           const pos = { x: m[3][0], y: m[3][1], z: m[3][2] };
@@ -412,7 +567,57 @@ function App() {
               parts: []
             }
           });
-          // Remove original joint:
+        }
+      } else if (targetType === "navlight") {
+        if (originalJoint) {
+          // If cloned coordinates were requested, we must actually modify the joint in updatedJoints
+          // because Navlights derive position from the joint directly.
+          if (cloneTarget && cloneTarget !== "Self") {
+             const index = updatedJoints.findIndex(j => j.name === jointName);
+             if (index !== -1) {
+                updatedJoints[index].local_transform = JSON.parse(JSON.stringify(originalJoint.local_transform));
+                if (originalJoint.position) updatedJoints[index].position = { ...originalJoint.position };
+             }
+          }
+          updatedNavlights.push({
+            name: jointName,
+            section: 0,
+            size: 1.0,
+            phase: 0.0,
+            frequency: 1.0,
+            style: "default",
+            color: { x: 1, y: 1, z: 1 },
+            distance: 100.0,
+            sprite_visible: true,
+            high_end_only: false
+          });
+          // Do NOT remove the original joint! Navlights implicitly bind to a Joint by name to extract their position!
+        }
+      } else if (targetType === "engine_burn") {
+        if (originalJoint) {
+          updatedEngineBurns.push({
+            name: jointName,
+            parent_name: originalJoint.parent_name || "Root",
+            num_divisions: 1,
+            num_flames: 1,
+            vertices: []
+          });
+          updatedJoints = updatedJoints.filter(j => j.name !== jointName);
+        }
+      } else if (targetType === "engine_glow") {
+        const originalJoint = model.joints.find(j => j.name === jointName);
+        if (originalJoint) {
+          updatedEngineGlows.push({
+            name: jointName,
+            parent_name: originalJoint.parent_name || "Root",
+            lod: 0,
+            mesh: {
+              name: jointName,
+              parent_name: "Root",
+              lod: 0,
+              parts: []
+            }
+          });
           updatedJoints = updatedJoints.filter(j => j.name !== jointName);
         }
       }
@@ -425,13 +630,15 @@ function App() {
       version: 512, // HOD 2.0 (0x200)
       joints: updatedJoints,
       markers: updatedMarkers,
-      collision_meshes: updatedCollisions
+      collision_meshes: updatedCollisions,
+      nav_lights: updatedNavlights,
+      engine_burns: updatedEngineBurns,
+      engine_glows: updatedEngineGlows,
     };
 
     setModel(upgradedModel);
     setIsDirty(true);
     setIsMigrationModalOpen(false);
-    setShowMigrationBanner(false);
     setStatusMsg("Model successfully auto-transformed to HOD 2.0 with customized schema reclassifications!");
     alert("Schema migration complete! Un-standardized joints have been promoted, and the file layout upgraded to modern HOD 2.0.");
   };
@@ -582,7 +789,13 @@ function App() {
   };
 
   const handleSaveHOD = async () => {
-    if (!model || !filePath) return;
+    if (!model) return;
+    
+    if (!filePath) {
+      handleSaveHODAs();
+      return;
+    }
+
     setIsSaving(true);
     setStatusMsg("Saving HOD...");
     setErrorMsg(null);
@@ -604,8 +817,8 @@ function App() {
   };
 
   const handleSaveHODAs = async () => {
-    if (!model || !filePath) {
-      alert("Please load a HOD file first to execute 'Save As'.");
+    if (!model) {
+      alert("Please load or create a HOD model first.");
       return;
     }
     
@@ -618,7 +831,7 @@ function App() {
       setStatusMsg("Saving HOD As...");
       setErrorMsg(null);
 
-      await invoke("save_hod_as", { sourcePath: filePath, targetPath: selectedPath, model });
+      await invoke("save_hod_as", { sourcePath: filePath || "", targetPath: selectedPath, model });
       
       setFilePath(selectedPath);
       setIsDirty(false);
@@ -692,6 +905,7 @@ function App() {
         onSaveAsClick={handleSaveHODAs}
         isSaving={isSaving}
         onNewClick={handleCreateNewHOD}
+        onImportDAEClick={selectAndImportDAE}
       />
 
       {/* Main Workspace Panels */}
@@ -728,114 +942,6 @@ function App() {
 
         {/* Center Viewport rendering */}
         <div style={{ position: "relative", height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", flex: 1 }}>
-          {showMigrationBanner && model && !model.is_v2 && (
-            <div
-              style={{
-                background: "rgba(255, 152, 0, 0.1)",
-                border: "1px solid #ff9800",
-                borderRadius: "8px",
-                padding: "16px 20px",
-                margin: "12px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                textAlign: "left",
-                color: "#ffe0b2",
-                zIndex: 100,
-                boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-                backdropFilter: "blur(4px)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "600", fontSize: "14px", color: "#ffb74d" }}>
-                <AlertTriangle size={20} />
-                <span>HOD 1.0 Legacy Format Detected</span>
-              </div>
-              <div style={{ fontSize: "13px", lineHeight: "1.5", color: "rgba(255, 255, 255, 0.85)" }}>
-                This HOD file was authored in the older Homeworld 2 legacy format. To edit, render, and deploy in the Remastered Engine, we recommend auto-transforming it to HOD 2.0.
-              </div>
-              <div style={{ paddingLeft: "12px", borderLeft: "2px solid #ff9800", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.7)" }}>
-                  ✦ Consolidation of old markers (<code>MRKR</code> with individual <code>HEAD</code>/<code>KEYF</code> children) into high-performance unified <code>MRKS</code>.
-                </div>
-                <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.7)" }}>
-                  ✦ Dynamic promotion of goblin meshes (<code>GOBG</code>), static meshes (<code>STAT</code>), and lods (<code>LMIP</code>) to modern HOD 2.0 meshes.
-                </div>
-                <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.7)" }}>
-                  ✦ Upgrade of joints hierarchy layout to the v2 standard.
-                </div>
-                <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.7)" }}>
-                  ✦ Save files will automatically write back as optimized, engine-ready HOD 2.0.
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
-                <button
-                  className="primary"
-                  onClick={() => {
-                    const upgradedModel = {
-                      ...model,
-                      is_v2: true,
-                      version: 512, // 0x200
-                    };
-                    setModel(upgradedModel);
-                    setShowMigrationBanner(false);
-                    setStatusMsg("Model successfully auto-transformed to HOD 2.0 layout! Patched components are ready to save.");
-                  }}
-                  style={{
-                    background: "linear-gradient(135deg, #ff9800, #f57c00)",
-                    color: "#fff",
-                    border: "none",
-                    padding: "8px 16px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Auto-Transform to HOD 2.0
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    // Initialize mapping with default value ("joint") for any ambiguous joints:
-                    const standardPrefixes = ["root", "hull", "nozzle", "weapon", "engine", "dock", "burn", "glow", "nav", "shield", "collision", "system"];
-                    const initialMappings: Record<string, "joint"> = {};
-                    model?.joints.forEach(joint => {
-                      const nameLower = joint.name.toLowerCase();
-                      const isStandard = nameLower === "root" || standardPrefixes.some(prefix => nameLower.startsWith(prefix));
-                      if (!isStandard) {
-                        initialMappings[joint.name] = "joint";
-                      }
-                    });
-                    setMigrationMappings(initialMappings);
-                    setIsMigrationModalOpen(true);
-                  }}
-                  style={{
-                    background: "linear-gradient(135deg, var(--accent-cyan), #00b0ff)",
-                    color: "#000",
-                    border: "none",
-                    padding: "8px 16px",
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                  }}
-                >
-                  🚀 Schema Migration Assistant
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => setShowMigrationBanner(false)}
-                  style={{
-                    padding: "8px 16px",
-                    fontSize: "12px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
           {model ? (
             <div style={{ position: "relative", width: "100%", height: "100%", flex: 1, minHeight: 0 }}>
               {!keeperTxtPath && (
@@ -934,7 +1040,7 @@ function App() {
                     onChange={(e) => setShowBoneLines(e.target.checked)}
                     style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
                   />
-                  <span>Skeleton Bones</span>
+                  <span>Node Hierarchy Lines</span>
                 </label>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px", borderTop: "1px solid var(--border-color)", paddingTop: "8px" }}>
@@ -1281,24 +1387,49 @@ function App() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "350px", overflowY: "auto", border: "1px solid var(--border-color)", borderRadius: "8px", background: "rgba(0,0,0,0.2)", padding: "10px" }}>
                   {Object.keys(migrationMappings).map((jointName) => {
                     const mappedType = migrationMappings[jointName];
+                    const cloneTarget = migrationCoordinateClones[jointName] || "Self";
                     return (
-                      <div key={jointName} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(22, 160, 255, 0.03)", border: "1px solid rgba(22, 160, 255, 0.1)", borderRadius: "6px" }}>
-                        <span style={{ fontSize: "13px", fontWeight: "600", color: "#fff", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: "10px", flex: 1 }}>
+                      <div key={jointName} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(22, 160, 255, 0.03)", border: "1px solid rgba(22, 160, 255, 0.1)", borderRadius: "6px", gap: "10px" }}>
+                        <span style={{ fontSize: "13px", fontWeight: "600", color: "#fff", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                           {jointName}
                         </span>
-                        <select
-                          value={mappedType}
-                          onChange={(e: any) => {
-                            const val = e.target.value;
-                            setMigrationMappings(prev => ({ ...prev, [jointName]: val }));
-                          }}
-                          style={{ width: "200px", height: "30px", fontSize: "12px", background: "#050a12", border: "1px solid var(--border-color)", color: "#fff" }}
-                        >
-                          <option value="joint">Standard Joint Bone</option>
-                          <option value="marker">Marker / Attachment Point</option>
-                          <option value="weapon">Weapon Assembly (HWRM template)</option>
-                          <option value="collision">Collision Hull Mesh</option>
-                        </select>
+                        
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Target Type:</span>
+                          <select
+                            value={mappedType}
+                            onChange={(e: any) => {
+                              const val = e.target.value;
+                              setMigrationMappings(prev => ({ ...prev, [jointName]: val }));
+                            }}
+                            style={{ width: "160px", height: "30px", fontSize: "12px", background: "#050a12", border: "1px solid var(--border-color)", color: "#fff", borderRadius: "4px" }}
+                          >
+                            <option value="joint">Standard Joint Bone</option>
+                            <option value="marker">Marker / Attachment Point</option>
+                            <option value="weapon">Weapon Assembly (HWRM template)</option>
+                            <option value="collision">Collision Hull Mesh</option>
+                            <option value="navlight">Navlight (Standalone)</option>
+                            <option value="engine_burn">Engine Burn</option>
+                            <option value="engine_glow">Engine Glow</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Clone Transform From:</span>
+                          <select
+                            value={cloneTarget}
+                            onChange={(e: any) => {
+                              const val = e.target.value;
+                              setMigrationCoordinateClones(prev => ({ ...prev, [jointName]: val }));
+                            }}
+                            style={{ width: "160px", height: "30px", fontSize: "12px", background: "#050a12", border: "1px solid var(--border-color)", color: "#fff", borderRadius: "4px" }}
+                          >
+                            <option value="Self">Self (Preserve)</option>
+                            {model?.joints.map(j => (
+                               <option key={j.name} value={j.name}>{j.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     );
                   })}
