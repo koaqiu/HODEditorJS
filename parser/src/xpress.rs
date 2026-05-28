@@ -137,10 +137,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
             let mut start = head[hash];
             let mut chain_len = 0;
 
-            while start != -1 && chain_len < 64 {
+            while start != -1 && chain_len < 256 {
                 let start_idx = start as usize;
                 let offset = input_idx - start_idx;
-                if offset > 65535 {
+                if offset > 2097151 {
                     break;
                 }
 
@@ -220,34 +220,15 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                     }
                 }
                 input_idx += best_length;
-            } else if best_length > 34 {
+            } else {
                 let byte1 = ((((best_length - 3) & 0x1F) << 3) | 0b111) as u8;
                 let byte2 = ((((best_length - 3) >> 5) & 0x07) | ((best_offset & 31) << 3)) as u8;
                 let byte3 = ((best_offset >> 5) & 0xFF) as u8;
-                let byte4 = ((best_offset >> 13) & 0x07) as u8;
+                let byte4 = ((best_offset >> 13) & 0xFF) as u8;
                 compressed.push(byte1);
                 compressed.push(byte2);
                 compressed.push(byte3);
                 compressed.push(byte4);
-                for i in 1..best_length {
-                    let idx = input_idx + i;
-                    if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10)
-                            ^ ((input[idx + 1] as usize) << 5)
-                            ^ (input[idx + 2] as usize))
-                            & 0xFFFF;
-                        prev[idx] = head[hash];
-                        head[hash] = idx as i32;
-                    }
-                }
-                input_idx += best_length;
-            } else {
-                let byte1 = (((best_length - 3) << 3) | 0b11) as u8;
-                let byte2 = (best_offset & 0xFF) as u8;
-                let byte3 = (best_offset >> 8) as u8;
-                compressed.push(byte1);
-                compressed.push(byte2);
-                compressed.push(byte3);
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
@@ -268,8 +249,12 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
         }
     }
 
-    let bytes = indicator.to_le_bytes();
-    compressed[indicator_pos..indicator_pos + 4].copy_from_slice(&bytes);
+    if indicator_bit == 0 {
+        compressed.truncate(indicator_pos);
+    } else {
+        let bytes = indicator.to_le_bytes();
+        compressed[indicator_pos..indicator_pos + 4].copy_from_slice(&bytes);
+    }
 
     compressed
 }
@@ -280,7 +265,12 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
 /// save code uses equal sizes to mean an uncompressed/raw stream, avoiding the
 /// game-side decompressor path for incompressible data.
 pub fn compress_or_raw(input: &[u8]) -> Vec<u8> {
-    input.to_vec()
+    let compressed = compress(input);
+    if compressed.len() >= input.len() {
+        input.to_vec()
+    } else {
+        compressed
+    }
 }
 
 #[cfg(test)]
