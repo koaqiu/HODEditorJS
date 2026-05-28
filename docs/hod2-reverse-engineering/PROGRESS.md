@@ -9,8 +9,8 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ## Current Status
 
 **Phase:** Phase 4 Ongoing (Compression Root Cause Proven)  
-**Status:** CRITICAL BREAKTHROUGH: Bypassing Xpress compression causes model to render correctly in-game. Compression output is incompatible with game engine's decompressor.  
-**Last Updated:** 2026-05-28 23:30 UTC  
+**Status:** Xpress compression fixes applied: 32-bit indicators + Type 4 matches. Ready for in-game testing.  
+**Last Updated:** 2026-05-29 00:15 UTC  
 **Updated By:** OpenCode Agent
 1. **Face Pool Size Mismatch:** Generated face pool is 37,704 bytes vs HODOR's 65,286 bytes. HODOR contains an extra ~27KB of index data at the end.
 2. **Vertex Data Divergence:** Normals, Tangents, and Binormals differ on 10,000+ vertices. Binormals differ on ~15,000 vertices, which is likely the cause of the spikiness.
@@ -153,19 +153,24 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ### Current Issues
 
 1. **Xpress Compression Incompatibility (PROVEN ROOT CAUSE):** Bypassing Xpress compression (setting compressed size = decompressed size) causes the model to render correctly in-game. This proves our compressor's output is incompatible with the game engine's decompressor. The vertex data divergence found by `pool_byte_diff` is NOT the root cause — the decompressor fails midway, leaving vertices at garbage/zero positions.
-2. **Face Pool Size Mismatch:** HODOR generates 65,286 bytes vs our 37,704 bytes for ter_centaur. HODOR appends ~27KB of extra index data at the end. Need to determine what this data is.
-3. **Serialization Asymmetries:**
+2. **Compression Fixes Applied:**
+   - Changed indicator word from 31-bit to 32-bit (HODOR consistently sets bit 31 in indicator words)
+   - Added Type 4 match handling (3-byte, offset up to 65535, length 3-34) — was missing from compressor
+   - Remaining differences are in match selection strategy (which offset to pick when multiple matches exist)
+3. **Face Pool Size Mismatch:** HODOR generates 65,286 bytes vs our 37,704 bytes for ter_centaur. HODOR appends ~27KB of extra index data at the end. Need to determine what this data is.
+4. **Serialization Asymmetries:**
    - `save_edits` face pool appending lacks 2-byte alignment.
    - `save_edits` vertex stride calculation is missing `0x04` (color) mask.
    - `prim_group_count` is inconsistent between v1 and v2, read vs write.
 
 ### Next Steps
 
-1. **Fix Xpress compression output** — our compressor produces byte patterns the game engine's decompressor cannot handle. Need to match HODOR's compression patterns exactly.
-2. Investigate why HODOR appends ~27KB extra to the face pool
-3. Fix `save_edits` 2-byte alignment bug
-4. Fix `save_edits` missing `0x04` color mask in stride calculation
-5. Fix `prim_group_count` inconsistency between v1/v2
+1. **Test in-game** — load the newly generated HOD files to see if the 32-bit indicator + Type 4 fixes resolve the vertex spikiness
+2. If spikiness persists, investigate match selection strategy differences (HODOR picks different offsets than our compressor)
+3. Investigate why HODOR appends ~27KB extra to the face pool
+4. Fix `save_edits` 2-byte alignment bug
+5. Fix `save_edits` missing `0x04` color mask in stride calculation
+6. Fix `prim_group_count` inconsistency between v1/v2
 
 ---
 

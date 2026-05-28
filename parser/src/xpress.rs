@@ -6,13 +6,13 @@ pub fn decompress(input: &[u8], output_size: usize) -> Result<Vec<u8>, String> {
     let mut output_idx = 0;
     let mut input_idx = 0;
     let mut indicator = 0u32;
-    let mut indicator_bit = 30; // Starts at 30 so the first iteration triggers a read (30 + 1 = 31)
+    let mut indicator_bit = 31; // Starts at 31 so the first iteration triggers a read (31 + 1 = 32)
 
     let input_len = input.len();
 
     while output_idx < output_size && input_idx < input_len {
         indicator_bit += 1;
-        if indicator_bit == 31 {
+        if indicator_bit == 32 {
             if input_idx + 3 >= input_len {
                 break;
             }
@@ -115,7 +115,7 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
     let mut prev = vec![-1i32; input_len];
 
     while input_idx < input_len {
-        if indicator_bit == 31 {
+        if indicator_bit == 32 {
             let bytes = indicator.to_le_bytes();
             compressed[indicator_pos..indicator_pos + 4].copy_from_slice(&bytes);
 
@@ -208,6 +208,26 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 let byte2 = (best_offset >> 6) as u8;
                 compressed.push(byte1);
                 compressed.push(byte2);
+                for i in 1..best_length {
+                    let idx = input_idx + i;
+                    if idx + 3 <= input_len {
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
+                        prev[idx] = head[hash];
+                        head[hash] = idx as i32;
+                    }
+                }
+                input_idx += best_length;
+            } else if best_offset < 65536 && best_length <= 34 {
+                // Type 4: 3-byte, offset up to 65535, length 3-34
+                let byte1 = (((best_length - 3) << 3) | 0b11) as u8;
+                let byte2 = (best_offset & 0xFF) as u8;
+                let byte3 = ((best_offset >> 8) & 0xFF) as u8;
+                compressed.push(byte1);
+                compressed.push(byte2);
+                compressed.push(byte3);
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
