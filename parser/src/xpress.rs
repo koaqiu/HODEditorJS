@@ -280,12 +280,7 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
 /// save code uses equal sizes to mean an uncompressed/raw stream, avoiding the
 /// game-side decompressor path for incompressible data.
 pub fn compress_or_raw(input: &[u8]) -> Vec<u8> {
-    let compressed = compress(input);
-    if compressed.len() >= input.len() {
-        input.to_vec()
-    } else {
-        compressed
-    }
+    input.to_vec()
 }
 
 #[cfg(test)]

@@ -571,6 +571,27 @@ cargo run --bin verify_lossless
 
 ---
 
-**Document Version:** 2.5  
+### In-Game Vertex Explosion / POOL Compression Mismatch Hypothesis
+
+**Status:** UNDER TEST
+
+**What changed:**
+- Documented in-game spikiness/vertex explosion in `docs/hod2-reverse-engineering/pool-compression-hypothesis.md`.
+- **Bypassed Compression**: Temporarily modified `compress_or_raw` in `parser/src/xpress.rs` to always return uncompressed raw buffers.
+- This forces the game engine to completely bypass its Xpress decompressor, reading the raw POOL streams directly, which will isolate if the decompression logic is causing the vertex corruption.
+- Regenerated all replication HOD fixtures (including `ter_centaur` and `ter_pharos`) with 100% uncompressed raw pools.
+
+**Test:**
+```bash
+cargo run --bin test_hodor_replication
+```
+
+**Result:**
+- Both replication tests continue to pass 2/2 successfully (100% success rate).
+- Generated HOD files now contain uncompressed pool streams and are ready for in-game testing.
+
+---
+
+**Document Version:** 2.6  
 **Last Updated:** 2026-05-28  
-**Next Update:** As further integration or feature development is undertaken.
+**Next Update:** After in-game verification of the uncompressed pool HOD files.
