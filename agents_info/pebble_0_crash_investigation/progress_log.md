@@ -850,3 +850,184 @@ This is more consistent with a triangle-strip or strip-like primitive stream wit
 - `cargo check --lib` passed with existing warnings.
 - `cargo run --bin test_from_scratch` regenerated the pebble HOD and reparsed it with `Name='Homeworld2 Multi Mesh File'`.
 - `cargo run --bin verify_lossless` structurally succeeded across the mandatory suite. Size deltas remain expected; generated files reparse with matching key counts.
+
+## 2026-05-27 MULT TAGS Preservation
+
+### Finding
+
+- After the fixed `NAME`, the regenerated pebble matched the original on `POOL` offset, preserved `KDOP`, preserved `INFO`, mesh counts, vertex/index counts, positions, normals, tangents, and face-pool topology.
+- One remaining concrete HVMD difference was `MULT` children:
+  - Original pebble `MULT`: two `NRML BMSH` children, no `FORM TAGS`.
+  - Generated pebble `MULT`: `FORM TAGS DoScars` plus two `NRML BMSH` children.
+- Other HOD2 files such as `ter_elysium.hod` and `ter_fenris.hod` do contain `FORM TAGS DoScars`, so the correct rule is conditional preservation, not global removal.
+
+### Fix Applied
+
+- `parser/src/hod.rs`
+  - Added `HODMesh.has_mult_tags` with serde defaulting.
+  - HOD2 `MULT` parsing records whether the parsed `MULT` had a `TAGS` child and copies that flag to each parsed LOD mesh.
+- `parser/src/compiler.rs`
+  - `CompiledMesh` now carries `has_mult_tags`.
+  - `generate_mult_chunks()` writes `FORM TAGS DoScars` only if any LOD in the generated `MULT` group had the flag set.
+- `parser/src/dae.rs`
+  - DAE-created meshes default `has_mult_tags` to false.
+- `src/components/Viewport.tsx`
+  - `HODMesh` interface now includes optional `has_mult_tags` so the metadata round-trips through the UI.
+- `agents_info/hod2_reverse_engineering_knowledge_base.md`
+  - Updated `MULT` notes to document that `FORM TAGS` is conditional, not universal.
+
+### Verification
+
+- `cargo check --lib` passed with existing warnings.
+- `npm run build` passed.
+- `cargo run --bin test_from_scratch` regenerated `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0.hod`.
+- `cargo run --bin verify_lossless` structurally succeeded across the mandatory suite. It still prints expected byte-size deltas, but generated files reparse with matching key counts.
+- `cargo run --bin compare_hods` confirmed original/new pebble still match parsed mesh topology and vertex data.
+- `cargo run --bin dump_mult -- "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0.hod"` now shows generated pebble `MULT (Size: 109)`, matching original pebble's `MULT` size and omitting `FORM TAGS`.
+- `git diff --check -- parser/src/hod.rs parser/src/compiler.rs parser/src/dae.rs src/components/Viewport.tsx agents_info/pebble_0_crash_investigation/progress_log.md agents_info/hod2_reverse_engineering_knowledge_base.md` had no output.
+
+### Current Status
+
+- The regenerated pebble is ready for another in-game test.
+- If in-game stretching still persists, the current parser-level comparisons no longer show an obvious mesh, face, `NAME`, `KDOP`, `INFO`, or `MULT TAGS` structural mismatch. Next likely targets are game-runtime-sensitive texture compression/Xpress dialect differences or remaining byte-level metadata differences in `INFO`/`STAT`/`LMIP` that the current parser model normalizes away.
+
+## 2026-05-27 Testing Fixture Replication: Tangent Space Lead
+
+### New Test Fixtures
+
+- User added controlled fixtures under `testing/`:
+  - `testing/pebble_0/pebble_0_vanilla.hod`
+  - `testing/pebble_1/pebble_1_vanilla.hod`
+  - `testing/pebble_2/pebble_2_vanilla.hod`
+- Each directory includes vanilla HOD2, exported LOD OBJ files, exported TGA textures, and material JSON.
+
+### Fixture Structure Finding
+
+- All three vanilla HODs are minimal HOD2 pebbles:
+  - Top-level chunks: `VERS`, fixed `NAME`, `POOL`, `HVMD`, `DTRM`, `INFO`.
+  - `HVMD`: three `LMIP`, one `STAT`, one `MULT`.
+  - `DTRM`: `HIER` + `KDOP`.
+  - No `COLD` in these vanilla pebble references.
+  - No `FORM TAGS DoScars` inside these `MULT` chunks.
+
+### Diagnostic Added
+
+- Added `parser/src/bin/replicate_testing.rs`.
+- The diagnostic rebuilds each fixture from only exported assets:
+  - Parses OBJ LODs into `HODMesh` data.
+  - Loads exported TGA textures into the same PNG-backed `HODTexture` shape used by UI imports.
+  - Loads material JSON.
+  - Writes `testing/<fixture>/<fixture>_from_assets.hod` via `generate_v2_from_model(&[], &asset_model)`.
+  - Re-parses generated files and compares against vanilla parsed models.
+
+### Key Finding
+
+- For all three fixtures, from-assets model data matched vanilla on:
+  - Mesh count.
+  - LOD count.
+  - Vertex count.
+  - Index count.
+  - Positions.
+  - Normals.
+  - UVs.
+- The consistent mismatch was tangent-space data:
+  - Every OBJ-imported vertex had default tangent/binormal values.
+  - Vanilla HODs contain non-default per-vertex tangents/binormals.
+- This is a concrete creation-from-assets difference. Even though it may present as shading rather than topology in a normal renderer, HWRM's shader path consumes tangent-space data for normal maps, so all-default tangents/binormals are unsafe.
+
+### Fix Applied
+
+- `parser/src/compiler.rs`
+  - Added tangent/binormal generation during mesh compilation when a part has HWRM tangent/binormal mask bits (`0x6000`) and all vertices still have the default imported tangent space.
+  - Tangents/binormals are computed from triangle positions and UV deltas and normalized before the mesh pool is serialized.
+  - Parsed vanilla HODs with real tangent/binormal data are not recomputed, because the default-only guard is false.
+
+### Verification
+
+- `cargo run --bin replicate_testing` generated:
+  - `testing/pebble_0/pebble_0_from_assets.hod`
+  - `testing/pebble_1/pebble_1_from_assets.hod`
+  - `testing/pebble_2/pebble_2_from_assets.hod`
+- The generated from-assets files reparse with matching mesh/LOD/vertex/index counts.
+- The computed tangent/binormal values still do not byte-match vanilla/HODOR tangents, so this is a likely improvement to test, not a proven final reproduction.
+- `cargo check --lib` passed with existing warnings.
+- `cargo run --bin verify_lossless` structurally succeeded across the mandatory suite. Size deltas remain expected; generated files reparse with matching key counts.
+- `git diff --check -- parser/src/compiler.rs parser/src/bin/replicate_testing.rs agents_info/pebble_0_crash_investigation/progress_log.md` had no output.
+
+### Next Steps
+
+- In-game test the new from-assets outputs under `testing/`, or recreate/resave `pebble_0.hod` through the app so the new compiler tangent generation is applied.
+- If meshes still glitch, continue using `replicate_testing` to narrow the remaining likely differences:
+  - Missing generated `KDOP` for true from-scratch assets.
+  - HODOR tangent/binormal algorithm exactness.
+  - Texture DXT1/Xpress byte dialect differences.
+  - `INFO`/`OWNR` byte-level metadata differences.
+
+## 2026-05-27 Structural Comparison Fix: KDOP + INFO Preservation
+
+### Investigation
+
+- Ran `testing_diff` comparing vanilla, parsed-vanilla roundtrip, and from-assets for all three pebble fixtures.
+- Found that the Xpress compressor stats were nearly identical between vanilla and roundtrip (mesh pool indicators: 165 vs 166). The earlier summary claiming "only 1 indicator word" was wrong.
+- The remaining differences were:
+  1. **Texture pool size**: DXT1 re-encoding produces different compressed output (~550KB smaller). Expected.
+  2. **INFO chunk**: vanilla=50 bytes, generated=32 bytes. The parser preserved INFO data but lost OWNR children because INFO was not in the recognized container list.
+  3. **from-assets DTRM missing KDOP**: The from-assets model had no `preserved_chunks`.
+
+### Fixes Applied
+
+- `parser/src/hod.rs`
+  - Root-level unparsed chunk handler now preserves INFO chunks into `preserved_chunks` so INFO is written back exactly as parsed during `generate_v2_from_model`.
+- `parser/src/bin/replicate_testing.rs`
+  - Now copies KDOP, COLD, and INFO from vanilla's `preserved_chunks` into the from-assets model so generated output includes them.
+  - Added debug output showing preserved chunk counts.
+- `parser/src/bin/testing_diff.rs`
+  - Added Xpress stream analysis (indicator word count, literal count, match count per POOL stream).
+
+### Verification Results
+
+- `cargo check --lib` passed.
+- `cargo run --bin verify_lossless` structurally passed.
+- `cargo run --bin testing_diff` shows:
+  - **Roundtrip** now matches vanilla on INFO (50 bytes) and KDOP (1588 bytes, same hash).
+  - **From-assets** now includes KDOP from vanilla (matching hash) and INFO (50 bytes).
+  - **Mesh pool sizes** between vanilla and roundtrip are nearly identical:
+    - pebble_0: vanilla=6628, roundtrip=6648 (0.3% delta)
+    - pebble_1: vanilla=35441, roundtrip=35739 (0.8% delta)
+    - pebble_2: vanilla=46530, roundtrip=46809 (0.6% delta)
+  - **Face pool sizes** match or nearly match.
+  - **Texture pool** is smaller in roundtrip due to DXT1 re-encoding differences (expected).
+  - **First byte difference** between vanilla and roundtrip is at byte 59 (POOL pool_type), not at a structural boundary.
+
+### Current State
+
+- The roundtrip output structure is now very close to vanilla on non-POOL chunks (KDOP, INFO, HVMD, DTRM all match).
+- The from-assets output now includes KDOP and INFO from vanilla.
+- The main remaining differences are:
+  1. Texture pool compressed bytes (DXT1 re-encoding, expected).
+  2. Tangent/binormal values for from-assets (computed vs HODOR original).
+- Ready for in-game retest of updated `testing/*_from_assets.hod` files.
+
+## 2026-05-27 LMIP Texture Name Case Fix
+
+### Investigation
+
+- User tested `testing/pebble_0/pebble_0_from_assets.hod` in-game and vertices still went to infinity.
+- Investigated the HVMD chunk byte-by-byte and found the LMIP texture names differed in case.
+- Vanilla LMIP has `Pebble_DIFF` (original case), but our generated LMIP had `pebble_diff` (lowercased).
+- Root cause: `texture_name_key()` in `hod.rs` lowercases texture names, and it was called when writing LMIP data.
+- The game engine likely does case-sensitive texture lookup; a case mismatch would cause texture loading failure.
+
+### Fix Applied
+
+- `parser/src/hod.rs`
+  - Changed `generate_lmip_texture_chunks_and_pool()` to write the original texture name to LMIP instead of the lowercased `texture_name_key()`.
+  - `texture_name_key()` is still used for STAT parameter matching and texture name comparison, where lowercasing is correct.
+
+### Verification
+
+- `cargo check --lib` passed.
+- `cargo run --bin testing_diff` confirms all 3 LMIP chunks are now byte-identical between vanilla and from_assets.
+- All three fixtures now match vanilla on: LMIP (87B × 3), KDOP (1588B, matching hash), INFO (50B), DTRM children (2: HIER + KDOP).
+- The only remaining differences are texture pool DXT1 re-encoding (expected) and tangent/binormal values (computed vs HODOR original).
+- Ready for in-game retest of updated `testing/*_from_assets.hod` files.

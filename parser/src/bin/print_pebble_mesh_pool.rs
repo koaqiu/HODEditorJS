@@ -1,6 +1,6 @@
-use std::fs::File;
-use std::io::{self, Read, Cursor};
 use hwr_hod_parser::iff::IffChunk;
+use std::fs::File;
+use std::io::{self, Cursor, Read};
 
 fn main() -> io::Result<()> {
     let path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/ship/hgn_interceptor/hgn_interceptor.hod";

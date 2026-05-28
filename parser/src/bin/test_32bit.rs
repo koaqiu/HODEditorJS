@@ -1,7 +1,7 @@
-use std::fs;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::Cursor;
 use hwr_hod_parser::hod::HODModel;
+use std::fs;
+use std::io::Cursor;
 
 fn decompress_32(input: &[u8], output_size: usize) -> Result<Vec<u8>, String> {
     let mut output = vec![0u8; output_size];
@@ -15,21 +15,30 @@ fn decompress_32(input: &[u8], output_size: usize) -> Result<Vec<u8>, String> {
     while output_idx < output_size && input_idx < input_len {
         indicator_bit += 1;
         if indicator_bit == 32 {
-            if input_idx + 3 >= input_len { break; }
+            if input_idx + 3 >= input_len {
+                break;
+            }
             indicator = u32::from_le_bytes([
-                input[input_idx], input[input_idx + 1], input[input_idx + 2], input[input_idx + 3]
+                input[input_idx],
+                input[input_idx + 1],
+                input[input_idx + 2],
+                input[input_idx + 3],
             ]);
             input_idx += 4;
             indicator_bit = 0;
         }
 
         if ((indicator >> indicator_bit) & 1) == 0 {
-            if output_idx >= output_size { break; }
+            if output_idx >= output_size {
+                break;
+            }
             output[output_idx] = input[input_idx];
             input_idx += 1;
             output_idx += 1;
         } else {
-            if input_idx + 1 >= input_len { break; }
+            if input_idx + 1 >= input_len {
+                break;
+            }
             let byte1 = input[input_idx];
             let mut length: usize;
             let offset: usize;
@@ -66,7 +75,9 @@ fn decompress_32(input: &[u8], output_size: usize) -> Result<Vec<u8>, String> {
             }
 
             while length > 0 {
-                if output_idx >= output_size { break; }
+                if output_idx >= output_size {
+                    break;
+                }
                 let copy_src = output_idx.checked_sub(offset);
                 if let Some(src) = copy_src {
                     output[output_idx] = output[src];
@@ -78,31 +89,33 @@ fn decompress_32(input: &[u8], output_size: usize) -> Result<Vec<u8>, String> {
             }
         }
     }
-    if output_idx < output_size { output.truncate(output_idx); }
+    if output_idx < output_size {
+        output.truncate(output_idx);
+    }
     Ok(output)
 }
 
 fn main() {
     let orig_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0_original.hod";
     let bytes = fs::read(orig_path).unwrap();
-    
+
     // Find POOL chunk
     let mut pool_start = 0;
-    for i in 0..bytes.len()-4 {
-        if &bytes[i..i+4] == b"POOL" {
+    for i in 0..bytes.len() - 4 {
+        if &bytes[i..i + 4] == b"POOL" {
             pool_start = i;
             break;
         }
     }
-    
-    let mut cursor = Cursor::new(&bytes[pool_start+8..]); // Skip POOL and size
+
+    let mut cursor = Cursor::new(&bytes[pool_start + 8..]); // Skip POOL and size
     let _pool_type = cursor.read_u32::<LittleEndian>().unwrap();
     let comp_tex_len = cursor.read_u32::<LittleEndian>().unwrap();
     let decomp_tex_len = cursor.read_u32::<LittleEndian>().unwrap();
-    
+
     let mut comp_tex = vec![0u8; comp_tex_len as usize];
     std::io::Read::read_exact(&mut cursor, &mut comp_tex).unwrap();
-    
+
     match decompress_32(&comp_tex, decomp_tex_len as usize) {
         Ok(out) => println!("32-bit decompress successful! len = {}", out.len()),
         Err(e) => println!("32-bit decompress failed: {}", e),

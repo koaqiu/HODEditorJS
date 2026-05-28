@@ -1,5 +1,5 @@
+use hwr_hod_parser::hod::{save_edits, HODModel};
 use std::fs;
-use hwr_hod_parser::hod::{HODModel, save_edits};
 
 fn main() -> Result<(), String> {
     let source_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_orion/ter_orion.hod";

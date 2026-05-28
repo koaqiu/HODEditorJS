@@ -1,7 +1,7 @@
+use hwr_hod_parser::iff::IffChunk;
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use hwr_hod_parser::iff::IffChunk;
 
 fn print_kdop(chunk: &IffChunk) {
     if chunk.id == "KDOP" {

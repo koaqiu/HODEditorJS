@@ -1,11 +1,15 @@
+use byteorder::{LittleEndian, ReadBytesExt};
 use hwr_hod_parser::iff::IffChunk;
 use std::fs::File;
 use std::io::Cursor;
-use byteorder::{LittleEndian, ReadBytesExt};
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let path = if args.len() > 1 { &args[1] } else { "asteroid_3.hod" };
+    let path = if args.len() > 1 {
+        &args[1]
+    } else {
+        "asteroid_3.hod"
+    };
     let mut f = File::open(path)?;
     while let Ok(root) = IffChunk::read_chunk(&mut f) {
         extract_dock(&root);

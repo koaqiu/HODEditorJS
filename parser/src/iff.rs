@@ -1,5 +1,5 @@
-use std::io::{self, Cursor, Read, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io::{self, Cursor, Read, Write};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChunkType {
@@ -12,8 +12,8 @@ pub enum ChunkType {
 pub struct IffChunk {
     pub id: String, // 4-char identifier (e.g. "HVMD", "BMSH", "POOL")
     pub chunk_type: ChunkType,
-    pub version: u32, // Only applicable to Normal chunks
-    pub data: Vec<u8>, // Raw payload if Normal or Default, empty if Form
+    pub version: u32,            // Only applicable to Normal chunks
+    pub data: Vec<u8>,           // Raw payload if Normal or Default, empty if Form
     pub children: Vec<IffChunk>, // Child chunks if Form
 }
 
@@ -28,11 +28,11 @@ impl IffChunk {
 
         let mut size_bytes = [0u8; 4];
         reader.read_exact(&mut size_bytes)?;
-        
+
         let mut size = u32::from_be_bytes(size_bytes);
         let size_le = u32::from_le_bytes(size_bytes);
-        
-        // Dynamic endianness detection: if BigEndian size is ridiculously large (e.g., > 16MB) 
+
+        // Dynamic endianness detection: if BigEndian size is ridiculously large (e.g., > 16MB)
         // and LittleEndian size is reasonable, use LittleEndian.
         // HOD 2.0 MULT child chunks use LittleEndian for their sizes (like BMSH).
         let mut used_le = false;
@@ -55,7 +55,16 @@ impl IffChunk {
                 let id_trimmed = real_id.trim();
                 let is_container = matches!(
                     id_trimmed,
-                    "HVMD" | "DTRM" | "BGMS" | "BSRM" | "COLD" | "GLOW" | "MRKR" | "KEYF" | "MSHL" | "MAD"
+                    "HVMD"
+                        | "DTRM"
+                        | "BGMS"
+                        | "BSRM"
+                        | "COLD"
+                        | "GLOW"
+                        | "MRKR"
+                        | "KEYF"
+                        | "MSHL"
+                        | "MAD"
                 );
 
                 let mut children = Vec::new();
@@ -67,10 +76,11 @@ impl IffChunk {
                             let mut len_bytes = [0u8; 4];
                             len_bytes.copy_from_slice(&payload[0..4]);
                             let len = u32::from_le_bytes(len_bytes) as usize;
-                            
+
                             let has_extents = if payload.len() >= 4 + len + 4 {
-                                let id_at_short = &payload[4 + len .. 4 + len + 4];
-                                let is_valid_short = id_at_short.iter().all(|&b| b >= 32 && b <= 126);
+                                let id_at_short = &payload[4 + len..4 + len + 4];
+                                let is_valid_short =
+                                    id_at_short.iter().all(|&b| b >= 32 && b <= 126);
                                 !is_valid_short
                             } else {
                                 false
@@ -81,7 +91,7 @@ impl IffChunk {
                             } else {
                                 4 + len
                             };
-                            
+
                             if payload.len() >= prefix_len {
                                 data = payload[0..prefix_len].to_vec();
                                 let mut cursor = Cursor::new(payload[prefix_len..].to_vec());
@@ -161,7 +171,7 @@ impl IffChunk {
 
                 // Write FORM tag
                 writer.write_all(b"FORM")?;
-                
+
                 // Write total size (payload + 4 bytes real ID)
                 let total_size = (payload_buffer.len() + 4) as u32;
                 writer.write_u32::<BigEndian>(total_size)?;

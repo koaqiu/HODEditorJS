@@ -1276,7 +1276,6 @@ function App() {
           onPositionChange={handleNodeTransform}
           onModelChange={setModel}
           onSelectedNodeChange={setSelectedNode}
-          filePath={filePath}
           selectedAnimIdx={selectedAnimIdx}
           visibleMeshes={visibleMeshes}
           onToggleVisibility={(meshKey) => setVisibleMeshes(prev => ({ ...prev, [meshKey]: prev[meshKey] === false ? true : false }))}

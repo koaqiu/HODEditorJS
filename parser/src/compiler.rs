@@ -1,36 +1,66 @@
-use std::collections::HashMap;
-use crate::hod::{HODModel, HODVertex, Vector3, Vector2, HODMeshPart};
+use crate::hod::{HODMeshPart, HODModel, HODVertex, Vector3};
 use crate::iff::IffChunk;
+use std::collections::HashMap;
 
 #[derive(Hash, PartialEq, Eq, Clone)]
 struct HashableVertex {
-    px: u32, py: u32, pz: u32,
-    nx: u32, ny: u32, nz: u32,
+    px: u32,
+    py: u32,
+    pz: u32,
+    nx: u32,
+    ny: u32,
+    nz: u32,
     c: u32,
-    u: u32, v: u32,
-    tx: u32, ty: u32, tz: u32,
-    bx: u32, by: u32, bz: u32,
+    u: u32,
+    v: u32,
+    tx: u32,
+    ty: u32,
+    tz: u32,
+    bx: u32,
+    by: u32,
+    bz: u32,
     skinning: Option<Vec<u8>>,
 }
 
 fn f32_to_u32(f: f32) -> u32 {
-    if f.is_nan() { 0 } else { f.to_bits() }
+    if f.is_nan() {
+        0
+    } else {
+        f.to_bits()
+    }
 }
 
 impl HashableVertex {
     fn from_hod(v: &HODVertex) -> Self {
-        let (nx, ny, nz) = v.normal.as_ref().map_or((0, 0, 0), |n| (f32_to_u32(n.x), f32_to_u32(n.y), f32_to_u32(n.z)));
-        let (u, v_uv) = v.uv.as_ref().map_or((0, 0), |uv| (f32_to_u32(uv.u), f32_to_u32(uv.v)));
-        let (tx, ty, tz) = v.tangent.as_ref().map_or((0, 0, 0), |t| (f32_to_u32(t.x), f32_to_u32(t.y), f32_to_u32(t.z)));
-        let (bx, by, bz) = v.binormal.as_ref().map_or((0, 0, 0), |b| (f32_to_u32(b.x), f32_to_u32(b.y), f32_to_u32(b.z)));
-        
+        let (nx, ny, nz) = v.normal.as_ref().map_or((0, 0, 0), |n| {
+            (f32_to_u32(n.x), f32_to_u32(n.y), f32_to_u32(n.z))
+        });
+        let (u, v_uv) =
+            v.uv.as_ref()
+                .map_or((0, 0), |uv| (f32_to_u32(uv.u), f32_to_u32(uv.v)));
+        let (tx, ty, tz) = v.tangent.as_ref().map_or((0, 0, 0), |t| {
+            (f32_to_u32(t.x), f32_to_u32(t.y), f32_to_u32(t.z))
+        });
+        let (bx, by, bz) = v.binormal.as_ref().map_or((0, 0, 0), |b| {
+            (f32_to_u32(b.x), f32_to_u32(b.y), f32_to_u32(b.z))
+        });
+
         Self {
-            px: f32_to_u32(v.position.x), py: f32_to_u32(v.position.y), pz: f32_to_u32(v.position.z),
-            nx, ny, nz,
+            px: f32_to_u32(v.position.x),
+            py: f32_to_u32(v.position.y),
+            pz: f32_to_u32(v.position.z),
+            nx,
+            ny,
+            nz,
             c: v.color.unwrap_or(0),
-            u, v: v_uv,
-            tx, ty, tz,
-            bx, by, bz,
+            u,
+            v: v_uv,
+            tx,
+            ty,
+            tz,
+            bx,
+            by,
+            bz,
             skinning: v.skinning_data.clone(),
         }
     }
@@ -65,13 +95,14 @@ impl MeshDeduplicator {
     }
 }
 
-use byteorder::{LittleEndian, BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use std::io::{Cursor, Write};
 
 pub struct CompiledMesh {
     pub name: String,
     pub parent_name: String,
     pub lod: i32,
+    pub has_mult_tags: bool,
     pub new_parts: Vec<HODMeshPart>,
 }
 
@@ -89,6 +120,191 @@ fn write_len_string<W: Write>(writer: &mut W, s: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+fn is_default_tangent_space(vertices: &[HODVertex]) -> bool {
+    if vertices.is_empty() {
+        return false;
+    }
+    vertices.iter().all(|v| {
+        let tangent_default = v.tangent.as_ref().map_or(true, |t| {
+            (t.x - 1.0).abs() < 0.0001 && t.y.abs() < 0.0001 && t.z.abs() < 0.0001
+        });
+        let binormal_default = v.binormal.as_ref().map_or(true, |b| {
+            b.x.abs() < 0.0001 && b.y.abs() < 0.0001 && (b.z - 1.0).abs() < 0.0001
+        });
+        tangent_default && binormal_default
+    })
+}
+
+fn add_vec3(a: &mut Vector3, b: &Vector3) {
+    a.x += b.x;
+    a.y += b.y;
+    a.z += b.z;
+}
+
+fn sub_vec3(a: &Vector3, b: &Vector3) -> Vector3 {
+    Vector3 {
+        x: a.x - b.x,
+        y: a.y - b.y,
+        z: a.z - b.z,
+    }
+}
+
+fn mul_vec3(a: &Vector3, s: f32) -> Vector3 {
+    Vector3 {
+        x: a.x * s,
+        y: a.y * s,
+        z: a.z * s,
+    }
+}
+
+fn dot_vec3(a: &Vector3, b: &Vector3) -> f32 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+fn cross_vec3(a: &Vector3, b: &Vector3) -> Vector3 {
+    Vector3 {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x,
+    }
+}
+
+fn vec3_length(v: &Vector3) -> f32 {
+    (v.x * v.x + v.y * v.y + v.z * v.z).sqrt()
+}
+
+fn normalize_vec3(v: Vector3, fallback: Vector3) -> Vector3 {
+    let len = vec3_length(&v);
+    if len > 0.000001 {
+        Vector3 {
+            x: v.x / len,
+            y: v.y / len,
+            z: v.z / len,
+        }
+    } else {
+        fallback
+    }
+}
+
+fn compute_tangent_space(vertices: &mut [HODVertex], indices: &[u16]) {
+    let mut tangents = vec![
+        Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0
+        };
+        vertices.len()
+    ];
+    let mut binormals = vec![
+        Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0
+        };
+        vertices.len()
+    ];
+
+    for tri in indices.chunks_exact(3) {
+        let i0 = tri[0] as usize;
+        let i1 = tri[1] as usize;
+        let i2 = tri[2] as usize;
+        if i0 >= vertices.len() || i1 >= vertices.len() || i2 >= vertices.len() {
+            continue;
+        }
+
+        let p0 = &vertices[i0].position;
+        let p1 = &vertices[i1].position;
+        let p2 = &vertices[i2].position;
+        let Some(uv0) = vertices[i0].uv.as_ref() else {
+            continue;
+        };
+        let Some(uv1) = vertices[i1].uv.as_ref() else {
+            continue;
+        };
+        let Some(uv2) = vertices[i2].uv.as_ref() else {
+            continue;
+        };
+
+        let edge1 = sub_vec3(p1, p0);
+        let edge2 = sub_vec3(p2, p0);
+        let du1 = uv1.u - uv0.u;
+        let dv1 = uv1.v - uv0.v;
+        let du2 = uv2.u - uv0.u;
+        let dv2 = uv2.v - uv0.v;
+        let denom = du1 * dv2 - du2 * dv1;
+        if denom.abs() < 0.000001 {
+            continue;
+        }
+        let inv = 1.0 / denom;
+        let tangent = Vector3 {
+            x: (edge1.x * dv2 - edge2.x * dv1) * inv,
+            y: (edge1.y * dv2 - edge2.y * dv1) * inv,
+            z: (edge1.z * dv2 - edge2.z * dv1) * inv,
+        };
+        let binormal = Vector3 {
+            x: (edge2.x * du1 - edge1.x * du2) * inv,
+            y: (edge2.y * du1 - edge1.y * du2) * inv,
+            z: (edge2.z * du1 - edge1.z * du2) * inv,
+        };
+        for idx in [i0, i1, i2] {
+            add_vec3(&mut tangents[idx], &tangent);
+            add_vec3(&mut binormals[idx], &binormal);
+        }
+    }
+
+    // Apply Gram-Schmidt orthogonalization
+    for (idx, vertex) in vertices.iter_mut().enumerate() {
+        let normal = vertex.normal.clone().unwrap_or(Vector3 {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        });
+        let tangent = tangents[idx].clone();
+        let binormal = binormals[idx].clone();
+
+        // Gram-Schmidt: tangent = normalize(tangent - normal * dot(tangent, normal))
+        let tangent_dot_normal = dot_vec3(&tangent, &normal);
+        let tangent_orthogonal = sub_vec3(&tangent, &mul_vec3(&normal, tangent_dot_normal));
+        let tangent_normalized = normalize_vec3(
+            tangent_orthogonal,
+            Vector3 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        );
+
+        // Calculate binormal as cross product of normal and tangent
+        let binormal_cross = cross_vec3(&normal, &tangent_normalized);
+        let binormal_normalized = normalize_vec3(
+            binormal_cross,
+            Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+            },
+        );
+
+        // Calculate handedness
+        let handedness = if dot_vec3(&cross_vec3(&normal, &tangent_normalized), &binormal) >= 0.0 {
+            1.0
+        } else {
+            -1.0
+        };
+
+        vertex.tangent = Some(tangent_normalized);
+        vertex.binormal = Some(mul_vec3(&binormal_normalized, handedness));
+    }
+}
+
+fn prepare_vertices_for_hwrm(part: &HODMeshPart) -> Vec<HODVertex> {
+    let mut vertices = part.vertices.clone();
+    if (part.vertex_mask & 0x6000) == 0x6000 && is_default_tangent_space(&vertices) {
+        compute_tangent_space(&mut vertices, &part.indices);
+    }
+    vertices
+}
+
 pub fn compile_model_meshes(model: &HODModel) -> Vec<CompiledMesh> {
     let mut compiled_meshes = Vec::new();
 
@@ -96,19 +312,20 @@ pub fn compile_model_meshes(model: &HODModel) -> Vec<CompiledMesh> {
         let mut new_parts = Vec::new();
 
         for part in &mesh.parts {
+            let vertices = prepare_vertices_for_hwrm(part);
             if !part.indices.is_empty() {
                 new_parts.push(HODMeshPart {
                     material_index: part.material_index,
                     vertex_mask: normalize_hwrm_vertex_mask(part.vertex_mask),
-                    vertices: part.vertices.clone(),
+                    vertices,
                     indices: part.indices.clone(),
                 });
             } else {
                 let mut dedup = MeshDeduplicator::new();
                 let mut new_indices = Vec::new();
-                
+
                 // If there are no indices, assume it's a flat triangle list
-                for (idx, v) in part.vertices.iter().enumerate() {
+                for v in &vertices {
                     let new_idx = dedup.add_vertex(v);
                     new_indices.push(new_idx);
                 }
@@ -126,6 +343,7 @@ pub fn compile_model_meshes(model: &HODModel) -> Vec<CompiledMesh> {
             name: mesh.name.clone(),
             parent_name: mesh.parent_name.clone(),
             lod: mesh.lod,
+            has_mult_tags: mesh.has_mult_tags,
             new_parts,
         });
     }
@@ -133,33 +351,62 @@ pub fn compile_model_meshes(model: &HODModel) -> Vec<CompiledMesh> {
     compiled_meshes
 }
 
-pub fn generate_pool_data(compiled_meshes: &[CompiledMesh], comp_tex: &[u8], decomp_tex_len: u32, pool_type: u32) -> std::io::Result<Vec<u8>> {
+pub fn generate_pool_data(
+    compiled_meshes: &[CompiledMesh],
+    comp_tex: &[u8],
+    decomp_tex_len: u32,
+    pool_type: u32,
+) -> std::io::Result<Vec<u8>> {
     let mut decomp_mesh = Vec::new();
     let mut decomp_face = Vec::new();
 
     for mesh in compiled_meshes {
         for part in &mesh.new_parts {
             let mut vertex_stride = 0;
-            if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
-            if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
-            if (part.vertex_mask & 0x04) != 0 { vertex_stride += 4; }
-            if (part.vertex_mask & 0x08) != 0 { vertex_stride += 8; }
-            if (part.vertex_mask & 0x10) != 0 { vertex_stride += 8; }
-            if (part.vertex_mask & 0x20) != 0 { vertex_stride += 8; }
-            if (part.vertex_mask & 0x2000) != 0 { vertex_stride += 12; }
-            if (part.vertex_mask & 0x4000) != 0 { vertex_stride += 12; }
-            
+            if (part.vertex_mask & 0x01) != 0 {
+                vertex_stride += 16;
+            }
+            if (part.vertex_mask & 0x02) != 0 {
+                vertex_stride += 16;
+            }
+            if (part.vertex_mask & 0x04) != 0 {
+                vertex_stride += 4;
+            }
+            if (part.vertex_mask & 0x08) != 0 {
+                vertex_stride += 8;
+            }
+            if (part.vertex_mask & 0x10) != 0 {
+                vertex_stride += 8;
+            }
+            if (part.vertex_mask & 0x20) != 0 {
+                vertex_stride += 8;
+            }
+            if (part.vertex_mask & 0x2000) != 0 {
+                vertex_stride += 12;
+            }
+            if (part.vertex_mask & 0x4000) != 0 {
+                vertex_stride += 12;
+            }
+
             if let Some(first_vert) = part.vertices.first() {
                 if let Some(ref skin) = first_vert.skinning_data {
                     vertex_stride += skin.len() as u32;
                 }
             }
-            if vertex_stride == 0 { vertex_stride = 1; }
-            
-            for v in &part.vertices {
-                let _ = crate::hod::write_vertex(&mut decomp_mesh, v, part.vertex_mask, 1400, vertex_stride);
+            if vertex_stride == 0 {
+                vertex_stride = 1;
             }
-            
+
+            for v in &part.vertices {
+                let _ = crate::hod::write_vertex(
+                    &mut decomp_mesh,
+                    v,
+                    part.vertex_mask,
+                    1400,
+                    vertex_stride,
+                );
+            }
+
             // Align face pool to 2 bytes
             if decomp_face.len() % 2 != 0 {
                 decomp_face.push(0);
@@ -172,15 +419,23 @@ pub fn generate_pool_data(compiled_meshes: &[CompiledMesh], comp_tex: &[u8], dec
         }
     }
 
-    let comp_mesh = if decomp_mesh.is_empty() { Vec::new() } else { crate::xpress::compress_or_raw(&decomp_mesh) };
-    
-    let comp_face = if decomp_face.is_empty() { Vec::new() } else { crate::xpress::compress_or_raw(&decomp_face) };
+    let comp_mesh = if decomp_mesh.is_empty() {
+        Vec::new()
+    } else {
+        crate::xpress::compress_or_raw(&decomp_mesh)
+    };
+
+    let comp_face = if decomp_face.is_empty() {
+        Vec::new()
+    } else {
+        crate::xpress::compress_or_raw(&decomp_face)
+    };
 
     let mut pool_buf = Vec::new();
     let mut cursor = Cursor::new(&mut pool_buf);
-    
+
     cursor.write_u32::<LittleEndian>(pool_type)?; // pool_type
-    
+
     cursor.write_u32::<LittleEndian>(comp_tex.len() as u32)?;
     cursor.write_u32::<LittleEndian>(decomp_tex_len)?;
     cursor.write_all(comp_tex)?;
@@ -231,23 +486,25 @@ pub fn generate_mult_chunks(compiled_meshes: &[CompiledMesh]) -> std::io::Result
             grouped_meshes.push((base_name, mesh.parent_name.clone(), vec![mesh]));
         }
     }
-    
+
     for (name, parent_name, lod_meshes) in grouped_meshes {
         let mut mult_buf = Vec::new();
         let mut m_cursor = Cursor::new(&mut mult_buf);
-        
+
         write_len_string(&mut m_cursor, &name)?;
         write_len_string(&mut m_cursor, &parent_name)?;
         m_cursor.write_u32::<LittleEndian>(lod_meshes.len() as u32)?;
-        
-        // Original HOD 2.0 MULT chunks count only the real TAGS payload here:
-        // real id "TAGS" + u32 string length + "DoScars" = 15 bytes.
-        // Do not include a counted padding byte; doing so shifts the following NRML.
-        m_cursor.write_all(b"FORM")?;
-        m_cursor.write_u32::<BigEndian>(15)?; // size
-        m_cursor.write_all(b"TAGS")?;
-        m_cursor.write_u32::<LittleEndian>(7)?; // string length
-        m_cursor.write_all(b"DoScars")?;
+
+        if lod_meshes.iter().any(|mesh| mesh.has_mult_tags) {
+            // Original HOD 2.0 MULT chunks count only the real TAGS payload here:
+            // real id "TAGS" + u32 string length + "DoScars" = 15 bytes.
+            // Do not include a counted padding byte; doing so shifts the following NRML.
+            m_cursor.write_all(b"FORM")?;
+            m_cursor.write_u32::<BigEndian>(15)?; // size
+            m_cursor.write_all(b"TAGS")?;
+            m_cursor.write_u32::<LittleEndian>(7)?; // string length
+            m_cursor.write_all(b"DoScars")?;
+        }
 
         for mesh in lod_meshes {
             let bmsh_data_size = 8 + mesh.new_parts.len() * 18;
@@ -258,10 +515,10 @@ pub fn generate_mult_chunks(compiled_meshes: &[CompiledMesh]) -> std::io::Result
             m_cursor.write_u32::<BigEndian>(nrml_size as u32)?;
             m_cursor.write_all(b"BMSH")?;
             m_cursor.write_u32::<BigEndian>(1400)?; // nested NRML BMSH version
-            
+
             m_cursor.write_i32::<LittleEndian>(mesh.lod)?;
             m_cursor.write_i32::<LittleEndian>(mesh.new_parts.len() as i32)?;
-            
+
             for part in &mesh.new_parts {
                 m_cursor.write_i32::<LittleEndian>(part.material_index as i32)?;
                 m_cursor.write_u32::<LittleEndian>(part.vertex_mask)?;
@@ -270,7 +527,7 @@ pub fn generate_mult_chunks(compiled_meshes: &[CompiledMesh]) -> std::io::Result
                 m_cursor.write_i32::<LittleEndian>(part.indices.len() as i32)?;
             }
         }
-        
+
         mult_chunks.push(IffChunk {
             id: "MULT".to_string(),
             chunk_type: crate::iff::ChunkType::Normal,
@@ -279,6 +536,6 @@ pub fn generate_mult_chunks(compiled_meshes: &[CompiledMesh]) -> std::io::Result
             children: Vec::new(),
         });
     }
-    
+
     Ok(mult_chunks)
 }

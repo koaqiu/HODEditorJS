@@ -1,6 +1,6 @@
-use std::fs::File;
-use std::io::{self, Read, Cursor};
 use hwr_hod_parser::iff::IffChunk;
+use std::fs::File;
+use std::io::{self, Cursor, Read};
 
 fn print_chunk_tree(chunk: &IffChunk, depth: usize) {
     let indent = "  ".repeat(depth);
@@ -11,11 +11,20 @@ fn print_chunk_tree(chunk: &IffChunk, depth: usize) {
     };
     println!(
         "{}{} (Type: {}, Version: {}, Data Size: {}, Children: {})",
-        indent, chunk.id, chunk_type_str, chunk.version, chunk.data.len(), chunk.children.len()
+        indent,
+        chunk.id,
+        chunk_type_str,
+        chunk.version,
+        chunk.data.len(),
+        chunk.children.len()
     );
 
     if ["KEYF", "LTTN", "EVAL", "MAD"].contains(&chunk.id.trim()) {
-        println!("{}  -> INTERESTING DATA: {:?}", indent, &chunk.data[..std::cmp::min(64, chunk.data.len())]);
+        println!(
+            "{}  -> INTERESTING DATA: {:?}",
+            indent,
+            &chunk.data[..std::cmp::min(64, chunk.data.len())]
+        );
     }
 
     for child in &chunk.children {

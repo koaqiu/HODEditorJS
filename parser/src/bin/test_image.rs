@@ -1,7 +1,7 @@
-use std::io::Cursor;
-use image::io::Reader as ImageReader;
+use base64::{engine::general_purpose, Engine as _};
 use image::imageops::FilterType;
-use base64::{Engine as _, engine::general_purpose};
+use image::io::Reader as ImageReader;
+use std::io::Cursor;
 
 fn main() {
     let img_data = vec![137, 80, 78, 71, 13, 10, 26, 10]; // PNG header

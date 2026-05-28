@@ -5,7 +5,8 @@ use std::path::Path;
 use hwr_hod_parser::hod::{HODMaterial, HODModel};
 use serde::Serialize;
 
-const USAGE: &str = "Usage: hod_semantic_dump <file.hod>\n       or set HOD_ZEPHYRUS_FIXTURE=/path/to/file.hod";
+const USAGE: &str =
+    "Usage: hod_semantic_dump <file.hod>\n       or set HOD_ZEPHYRUS_FIXTURE=/path/to/file.hod";
 
 #[derive(Serialize)]
 struct SemanticDump<'a> {

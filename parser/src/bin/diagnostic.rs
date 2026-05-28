@@ -1,17 +1,24 @@
+use hwr_hod_parser::hod::{synthesize_engine_nozzles_v1, validate_marker_parents, HODModel};
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use hwr_hod_parser::hod::{HODModel, synthesize_engine_nozzles_v1, validate_marker_parents};
 
 fn print_mappings(model: &HODModel, label: &str) {
     println!("--- {} Mappings ---", label);
     println!("Joints:");
     for j in &model.joints {
-        println!("  - {} (parent: {})", j.name, j.parent_name.clone().unwrap_or_else(|| "None".to_string()));
+        println!(
+            "  - {} (parent: {})",
+            j.name,
+            j.parent_name.clone().unwrap_or_else(|| "None".to_string())
+        );
     }
     println!("Navlights:");
     for n in &model.nav_lights {
-        println!("  - {} (style: {}, section: {})", n.name, n.style, n.section);
+        println!(
+            "  - {} (style: {}, section: {})",
+            n.name, n.style, n.section
+        );
     }
     println!("Engine Burns:");
     for b in &model.engine_burns {

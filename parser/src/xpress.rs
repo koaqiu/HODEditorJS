@@ -108,7 +108,7 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
     let mut indicator = 0u32;
     let mut indicator_bit = 0;
     let mut indicator_pos = 0;
-    
+
     compressed.write_u32::<LittleEndian>(0).unwrap();
 
     let mut head = vec![-1i32; 65536];
@@ -129,9 +129,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
         let mut best_offset = 0;
 
         if input_idx + 3 <= input_len {
-            let hash = (((input[input_idx] as usize) << 10) 
-                ^ ((input[input_idx + 1] as usize) << 5) 
-                ^ (input[input_idx + 2] as usize)) & 0xFFFF;
+            let hash = (((input[input_idx] as usize) << 10)
+                ^ ((input[input_idx + 1] as usize) << 5)
+                ^ (input[input_idx + 2] as usize))
+                & 0xFFFF;
 
             let mut start = head[hash];
             let mut chain_len = 0;
@@ -144,7 +145,9 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 }
 
                 let mut len = 0;
-                while input_idx + len < input_len && input[start_idx + len] == input[input_idx + len] {
+                while input_idx + len < input_len
+                    && input[start_idx + len] == input[input_idx + len]
+                {
                     len += 1;
                     if len >= 258 {
                         break;
@@ -174,9 +177,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10) 
-                            ^ ((input[idx + 1] as usize) << 5) 
-                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
                         prev[idx] = head[hash];
                         head[hash] = idx as i32;
                     }
@@ -190,9 +194,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10) 
-                            ^ ((input[idx + 1] as usize) << 5) 
-                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
                         prev[idx] = head[hash];
                         head[hash] = idx as i32;
                     }
@@ -206,9 +211,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10) 
-                            ^ ((input[idx + 1] as usize) << 5) 
-                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
                         prev[idx] = head[hash];
                         head[hash] = idx as i32;
                     }
@@ -226,9 +232,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10) 
-                            ^ ((input[idx + 1] as usize) << 5) 
-                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
                         prev[idx] = head[hash];
                         head[hash] = idx as i32;
                     }
@@ -244,9 +251,10 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
                 for i in 1..best_length {
                     let idx = input_idx + i;
                     if idx + 3 <= input_len {
-                        let hash = (((input[idx] as usize) << 10) 
-                            ^ ((input[idx + 1] as usize) << 5) 
-                            ^ (input[idx + 2] as usize)) & 0xFFFF;
+                        let hash = (((input[idx] as usize) << 10)
+                            ^ ((input[idx + 1] as usize) << 5)
+                            ^ (input[idx + 2] as usize))
+                            & 0xFFFF;
                         prev[idx] = head[hash];
                         head[hash] = idx as i32;
                     }
@@ -286,7 +294,9 @@ mod tests {
 
     #[test]
     fn test_xpress_roundtrip_basic() {
-        let original = b"Hello World! Hello World! Hello World! This is MS XPress LZ77 algorithm test!".to_vec();
+        let original =
+            b"Hello World! Hello World! Hello World! This is MS XPress LZ77 algorithm test!"
+                .to_vec();
         let compressed = compress(&original);
         let decompressed = decompress(&compressed, original.len()).unwrap();
         assert_eq!(original.as_slice(), decompressed.as_slice());

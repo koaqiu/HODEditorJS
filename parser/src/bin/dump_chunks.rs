@@ -1,7 +1,7 @@
+use hwr_hod_parser::iff::IffChunk;
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use hwr_hod_parser::iff::IffChunk;
 
 fn print_chunk_tree(chunk: &IffChunk, indent: usize) {
     let padding = "  ".repeat(indent);
@@ -36,7 +36,7 @@ fn main() {
     }
 
     let mut cursor = std::io::Cursor::new(buffer);
-    
+
     while cursor.position() < cursor.get_ref().len() as u64 {
         match IffChunk::read_chunk(&mut cursor) {
             Ok(chunk) => {

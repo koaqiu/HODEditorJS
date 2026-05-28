@@ -17,13 +17,13 @@ fn main() -> std::io::Result<()> {
 
     let name = read_len_string(&mut cursor)?;
     println!("Mesh Name: {}", name);
-    
+
     let parent = read_len_string(&mut cursor)?;
     println!("Parent Name: {}", parent);
-    
+
     let lod_count = cursor.read_u32::<LittleEndian>()?;
     println!("LOD Count (maybe?): {}", lod_count);
-    
+
     // Read 6 floats (BBOX)
     let min_x = cursor.read_f32::<LittleEndian>()?;
     let min_y = cursor.read_f32::<LittleEndian>()?;
@@ -31,19 +31,22 @@ fn main() -> std::io::Result<()> {
     let max_x = cursor.read_f32::<LittleEndian>()?;
     let max_y = cursor.read_f32::<LittleEndian>()?;
     let max_z = cursor.read_f32::<LittleEndian>()?;
-    println!("BBOX: Min({}, {}, {}) Max({}, {}, {})", min_x, min_y, min_z, max_x, max_y, max_z);
-    
+    println!(
+        "BBOX: Min({}, {}, {}) Max({}, {}, {})",
+        min_x, min_y, min_z, max_x, max_y, max_z
+    );
+
     // Read 4 floats (BSPH)
     let cx = cursor.read_f32::<LittleEndian>()?;
     let cy = cursor.read_f32::<LittleEndian>()?;
     let cz = cursor.read_f32::<LittleEndian>()?;
     let r = cursor.read_f32::<LittleEndian>()?;
     println!("BSPH: Center({}, {}, {}) Radius({})", cx, cy, cz, r);
-    
+
     let val3 = cursor.read_u32::<LittleEndian>()?;
     let val4 = cursor.read_u32::<LittleEndian>()?;
     println!("Val3: {}, Val4: {}", val3, val4);
-    
+
     println!("Offset now: 0x{:X}", cursor.position());
 
     println!("Dumping next 32 u32s in hex:");
@@ -53,6 +56,6 @@ fn main() -> std::io::Result<()> {
         }
     }
     println!();
-    
+
     Ok(())
 }

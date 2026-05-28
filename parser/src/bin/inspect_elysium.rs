@@ -4,7 +4,7 @@ use std::path::Path;
 
 fn main() {
     let path = Path::new("/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_elysium/ter_elysium.hod");
-    
+
     let bytes = match fs::read(path) {
         Ok(b) => b,
         Err(e) => {

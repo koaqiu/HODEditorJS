@@ -1,17 +1,22 @@
 use hwr_hod_parser::dae::parse_dae;
+use std::env;
 use std::fs;
 
 fn main() {
-    let dae_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/current_project_processing/ship_converted/shi_aeshma/shi_aeshma.DAE";
-    
-    let xml_str = match fs::read_to_string(dae_path) {
+    let dae_path = env::args().nth(1).unwrap_or_else(|| {
+        "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/mod-tools/HODEditorJS/testing/ter_pharos/ter_pharos.DAE".to_string()
+    });
+
+    println!("Parsing DAE: {}", dae_path);
+
+    let xml_str = match fs::read_to_string(&dae_path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Failed to read DAE: {}", e);
             return;
         }
     };
-    
+
     match parse_dae(&xml_str) {
         Ok(model) => {
             println!("Successfully parsed DAE into HODModel!");
@@ -19,10 +24,14 @@ fn main() {
             for mesh in &model.meshes {
                 println!("  - {} ({} parts)", mesh.name, mesh.parts.len());
                 for part in &mesh.parts {
-                    println!("      Material Index: {}, Vertices: {}", part.material_index, part.vertices.len());
+                    println!(
+                        "      Material Index: {}, Vertices: {}",
+                        part.material_index,
+                        part.vertices.len()
+                    );
                 }
             }
-            
+
             println!("Joints: {}", model.joints.len());
             println!("Markers: {}", model.markers.len());
             println!("NavLights: {}", model.nav_lights.len());

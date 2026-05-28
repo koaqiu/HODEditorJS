@@ -1,5 +1,5 @@
-use std::fs;
 use hwr_hod_parser::hod::HODModel;
+use std::fs;
 
 fn main() {
     let orig_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0_original.hod";

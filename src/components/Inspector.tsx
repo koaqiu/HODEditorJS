@@ -10,7 +10,6 @@ interface InspectorProps {
   onPositionChange: (name: string, type: string, pos: Vector3D) => void;
   onModelChange?: (updatedModel: HODModel) => void;
   onSelectedNodeChange?: (node: { type: string; name: string } | null) => void;
-  filePath: string;
   selectedAnimIdx?: number;
   visibleMeshes?: Record<string, boolean>;
   onToggleVisibility?: (meshKey: string) => void;
@@ -415,7 +414,6 @@ export const Inspector: React.FC<InspectorProps> = ({
   onPositionChange,
   onModelChange,
   onSelectedNodeChange,
-  filePath,
   selectedAnimIdx,
   visibleMeshes,
   onToggleVisibility,
@@ -2025,26 +2023,25 @@ export const Inspector: React.FC<InspectorProps> = ({
       };
 
       const handleImportTGA = async () => {
-        if (!filePath) {
-          alert("Please save the HOD file first so we know where to copy and bind the imported TGA texture.");
-          return;
-        }
-
         try {
-          const importedTex = await invoke<any | null>("import_tga_texture", { hodFilePath: filePath });
-          if (!importedTex) return;
+          const importedTexs = await invoke<any[] | null>("import_tga_textures");
+          if (!importedTexs || importedTexs.length === 0) return;
 
           let updatedTextures = [...(model.textures || [])];
-          const existsIdx = updatedTextures.findIndex(t => t.name.toLowerCase() === importedTex.name.toLowerCase());
-          if (existsIdx !== -1) {
-            updatedTextures[existsIdx] = importedTex;
-          } else {
-            updatedTextures.push(importedTex);
+          for (const importedTex of importedTexs) {
+            const existsIdx = updatedTextures.findIndex(t => t.name.toLowerCase() === importedTex.name.toLowerCase());
+            if (existsIdx !== -1) {
+              updatedTextures[existsIdx] = importedTex;
+            } else {
+              updatedTextures.push(importedTex);
+            }
           }
 
           onModelChange?.({ ...model, textures: updatedTextures });
-          invoke("log_event", { level: "INFO", message: `Imported and bound TGA texture: ${importedTex.name}` }).catch(console.error);
-          alert(`Successfully imported and copied TGA texture "${importedTex.name}" to your HOD folder!\n\nIt is now available in the texture slots dropdown list below.`);
+          
+          const names = importedTexs.map(t => t.name).join(", ");
+          invoke("log_event", { level: "INFO", message: `Imported and bound TGA textures: ${names}` }).catch(console.error);
+          alert(`Successfully imported TGA textures "${names}"!\n\nThey are now available in the texture slots dropdown list below.`);
         } catch (e: any) {
           console.error(e);
           alert(`Failed to import TGA texture: ${e.toString()}`);
@@ -2215,16 +2212,34 @@ export const Inspector: React.FC<InspectorProps> = ({
 
                 <div style={{ borderTop: "1px dashed var(--border-color)", marginTop: "8px", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
                   <div style={{ fontSize: "11px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
-                    <strong>📁 Homeworld TGA Directory:</strong>{" "}
-                    {filePath ? (
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent-cyan)", wordBreak: "break-all" }}>
-                        {filePath.substring(0, Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\")))}
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--accent-danger)", fontWeight: "600" }}>
-                        Unsaved HOD (Save HOD to enable TGA imports)
-                      </span>
-                    )}
+                    <strong>📁 Loaded TGA Directories:</strong>{" "}
+                    {(() => {
+                      const tgaDirs = new Set<string>();
+                      model.textures?.forEach(t => {
+                        if (t.source_path) {
+                          const dir = t.source_path.substring(0, Math.max(t.source_path.lastIndexOf("/"), t.source_path.lastIndexOf("\\")));
+                          if (dir) tgaDirs.add(dir);
+                        }
+                      });
+                      const dirs = Array.from(tgaDirs);
+                      if (dirs.length > 0) {
+                        return (
+                          <div style={{ marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
+                            {dirs.map((d, i) => (
+                              <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent-cyan)", wordBreak: "break-all" }}>
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-muted)", marginLeft: "4px" }}>
+                          No external TGAs loaded.
+                        </span>
+                      );
+                    })()}
                   </div>
                   <button
                     onClick={handleImportTGA}
@@ -2237,10 +2252,10 @@ export const Inspector: React.FC<InspectorProps> = ({
                       justifyContent: "center",
                       gap: "6px"
                     }}
-                    title="Import an external .TGA image file directly into your saved HOD folder and make it available in slots"
+                    title="Import multiple external .TGA image files directly into the editor and make them available in slots"
                   >
                     <Upload size={12} style={{ color: "var(--accent-cyan)" }} />
-                    <span>Import .TGA Texture...</span>
+                    <span>Import .TGA Textures...</span>
                   </button>
                 </div>
               </div>

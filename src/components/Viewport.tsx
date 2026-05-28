@@ -35,6 +35,7 @@ export interface HODMesh {
   name: string;
   parent_name: string;
   lod: number;
+  has_mult_tags?: boolean;
   parts: HODMeshPart[];
 }
 
@@ -117,6 +118,7 @@ export interface HODTexture {
   format: string;
   png_preview?: string;
   png_data?: string;
+  source_path?: string;
 }
 
 export interface HODKeyframe {

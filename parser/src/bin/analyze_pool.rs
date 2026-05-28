@@ -1,9 +1,9 @@
-use std::fs;
+use byteorder::{LittleEndian, ReadBytesExt};
 use hwr_hod_parser::iff::IffParser;
 use hwr_hod_parser::xpress;
-use std::io::Cursor;
-use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashSet;
+use std::fs;
+use std::io::Cursor;
 
 fn decompress_mesh_pool(bytes: &[u8]) -> Vec<u8> {
     let chunks = hwr_hod_parser::iff::parse_iff(bytes).unwrap();
@@ -23,24 +23,32 @@ fn decompress_mesh_pool(bytes: &[u8]) -> Vec<u8> {
 fn main() {
     let orig_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0_original.hod";
     let gen_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/pebble/pebble_0/pebble_0.hod";
-    
+
     let orig_mesh = decompress_mesh_pool(&fs::read(orig_path).unwrap());
     let gen_mesh = decompress_mesh_pool(&fs::read(gen_path).unwrap());
-    
+
     let mut orig_unique = HashSet::new();
     for i in (0..orig_mesh.len()).step_by(64) {
         if i + 64 <= orig_mesh.len() {
-            orig_unique.insert(&orig_mesh[i..i+64]);
+            orig_unique.insert(&orig_mesh[i..i + 64]);
         }
     }
-    
+
     let mut gen_unique = HashSet::new();
     for i in (0..gen_mesh.len()).step_by(64) {
         if i + 64 <= gen_mesh.len() {
-            gen_unique.insert(&gen_mesh[i..i+64]);
+            gen_unique.insert(&gen_mesh[i..i + 64]);
         }
     }
-    
-    println!("Orig mesh vertices: {}, unique: {}", orig_mesh.len() / 64, orig_unique.len());
-    println!("Gen mesh vertices: {}, unique: {}", gen_mesh.len() / 64, gen_unique.len());
+
+    println!(
+        "Orig mesh vertices: {}, unique: {}",
+        orig_mesh.len() / 64,
+        orig_unique.len()
+    );
+    println!(
+        "Gen mesh vertices: {}, unique: {}",
+        gen_mesh.len() / 64,
+        gen_unique.len()
+    );
 }

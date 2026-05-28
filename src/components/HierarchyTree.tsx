@@ -843,8 +843,8 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     if (!model || !newMatName.trim()) return;
     const name = newMatName.trim();
     
-    // Default slot suffixes based on common shaders
-    const textureSlots = [`${name}_diff`, `${name}_glow`, `${name}_team`, `${name}_norm`];
+    // Do not pre-fill texture slots per user request
+    const textureSlots = ["", "", "", ""];
 
     const newMaterial = {
       name,
@@ -852,31 +852,16 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
       texture_maps: textureSlots
     };
 
-    let updatedTextures = [...(model.textures || [])];
-    textureSlots.forEach(slot => {
-      if (!updatedTextures.some(t => t.name === slot)) {
-        updatedTextures.push({
-          name: slot,
-          width: 128,
-          height: 128,
-          format: "RGBA8",
-          png_preview: undefined,
-          png_data: undefined
-        });
-      }
-    });
-
     const updatedModel = {
       ...model,
-      materials: [...(model.materials || []), newMaterial],
-      textures: updatedTextures
+      materials: [...(model.materials || []), newMaterial]
     };
 
     onModelChange?.(updatedModel);
     setNewMatName("");
     setIsAddMatOpen(false);
     invoke("log_event", { level: "INFO", message: `Added new material: ${name} with shader: ${newMatShader}` }).catch(console.error);
-    alert(`Material "${name}" successfully added to the library! Slot textures allocated.`);
+    alert(`Material "${name}" successfully added to the library!`);
   };
 
   const isNodeDeletable = (name: string, type: string): boolean => {
@@ -3281,7 +3266,7 @@ const handleDeleteNode = (name: string, type: string) => {
                   ))}
                 </select>
                 <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
-                  ℹ️ This will pre-bake DIFF, GLOW, TEAM, and NORM texture slot mappings for this material.
+                  ℹ️ Texture mappings will default to (None).
                 </div>
               </div>
             </div>
