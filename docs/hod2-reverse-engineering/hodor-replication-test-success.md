@@ -89,14 +89,14 @@ Texture-format result:
 
 ## Next Steps
 
-1. Fix the face pool size mismatch (~27KB missing from generated `ter_centaur` face pool).
-2. Fix vertex generation (normals, tangents, binormals) to achieve byte-for-byte parity with HODOR.
+1. **Fix Xpress compression output** — our compressor produces byte patterns the game engine's decompressor cannot handle. Proven: bypassing compression makes the model render correctly in-game.
+2. Fix the face pool size mismatch (~27KB missing from generated `ter_centaur` face pool).
 3. Fix collision mesh serialization alignment and stride bugs.
 4. Expand HODOR source-asset fixtures to cover additional ship and terrain assets.
 5. Integrate workflow into the editor UI.
 
 ---
 
-**Document Version:** 3.1  
+**Document Version:** 3.2  
 **Last Updated:** 2026-05-28  
-**Status:** Ongoing. In-game rendering is still spiky. Byte-level diagnostic tools have identified face pool size mismatches and massive vertex normal/tangent/binormal divergence as the root cause, invalidating the previous assumption that structure-count matching equals success.
+**Status:** CRITICAL BREAKTHROUGH: Bypassing Xpress compression causes model to render correctly in-game. Compression output is incompatible with game engine's decompressor. This is the proven root cause of vertex spikiness.

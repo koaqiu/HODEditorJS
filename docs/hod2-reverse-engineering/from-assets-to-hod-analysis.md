@@ -46,9 +46,9 @@ What works:
 
 What is not complete:
 
-- In-game rendering is still spiky for generated models.
-- Byte-level equivalence for face pools and vertex data (normals, tangents, binormals). HODOR face pools contain extra trailing data, and vertex binormals diverge significantly.
-- Serialization asymmetries (e.g. alignment, stride calculation) must be fixed to achieve full parity.
+- **Xpress compression incompatibility (PROVEN ROOT CAUSE):** Bypassing compression (setting compressed size = decompressed size) causes the model to render correctly in-game. Our compressor's output is incompatible with the game engine's decompressor. The vertex data divergence found by `pool_byte_diff` is NOT the root cause.
+- Face pool size mismatch (~27KB missing from generated `ter_centaur` face pool).
+- Serialization asymmetries (alignment, stride calculation, prim_group_count).
 - Editor UI integration for the source-asset workflow is not done.
 
 ## DAE Intermediate Oracle
@@ -152,13 +152,13 @@ Current result:
 
 ## Next Targets
 
-1. Fix `hod.rs` and `compiler.rs` generation asymmetries (stride calc, alignment, `prim_group_count`).
-2. Discover why HODOR's face pool contains an extra 27KB of data at the end (LOD duplication?).
-3. Fix normal/tangent/binormal generation to achieve byte-level parity with HODOR, which should resolve the in-game spikiness.
+1. **Fix Xpress compression output** — our compressor produces byte patterns the game engine's decompressor cannot handle. Need to match HODOR's compression patterns exactly. Proven: bypassing compression makes the model render correctly.
+2. Investigate why HODOR appends ~27KB extra to the face pool.
+3. Fix serialization asymmetries (alignment, stride, prim_group_count).
 4. Editor UI integration.
 
 ---
 
-**Document Version:** 3.2  
+**Document Version:** 3.3  
 **Last Updated:** 2026-05-28  
-**Status:** In-game rendering is still spiky. Byte-level diagnostic tools have identified face pool size mismatches and vertex data divergence (binormals, tangents) as the root cause.
+**Status:** CRITICAL BREAKTHROUGH: Bypassing Xpress compression causes model to render correctly in-game. Compression output is incompatible with game engine's decompressor.
