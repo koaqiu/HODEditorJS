@@ -458,6 +458,10 @@ impl HODModel {
                         match sub_chunk.id.trim() {
                             "LMIP" => {
                                 // Extract textures from LMIP
+                                // LMIP chunks can be tiny headers (36 bytes) — skip if too small for the 48-byte header
+                                if sub_chunk.data.len() < 48 {
+                                    continue;
+                                }
                                 let tex = parse_texture(sub_chunk, &mut context)
                                     .map_err(|e| format!("Error in LMIP texture: {}", e))?;
                                 textures.push(tex);
@@ -2644,11 +2648,11 @@ fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HODTe
     let mut raw_pixels = Vec::new();
     if context.is_v2 {
         let expected_size = if format == "DXT1" {
-            std::cmp::max(8, (width * height) / 2) as usize
+            std::cmp::max(8, (width as usize * height as usize) / 2)
         } else if format == "DXT5" {
-            std::cmp::max(16, width * height) as usize
+            std::cmp::max(16, width as usize * height as usize)
         } else {
-            (width * height * 4) as usize
+            width as usize * height as usize * 4
         };
         let mut buf = vec![0u8; expected_size.min(1024 * 1024 * 8)]; // clamp to safe limits
         if let Ok(_) = context.texture_pool.read_exact(&mut buf) {
@@ -4643,9 +4647,23 @@ fn generate_lmip_texture_chunks_and_pool(
         };
 
         let mut data = Vec::new();
-        // Use the original texture name case for LMIP — game does case-sensitive lookup
-        write_len_string(&mut data, &texture.name)?;
-        data.write_all(output_format.as_bytes())
+        // LMIP chunk data format: fixed 32-byte name, u32 format_val, u32 width, u32 height, u32 mip_count, then mip dims
+        let mut name_buf = [0u8; 32];
+        let name_bytes = texture.name.as_bytes();
+        let copy_len = name_bytes.len().min(31);
+        name_buf[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+        data.write_all(&name_buf)
+            .map_err(|e| e.to_string())?;
+        let format_val: u32 = match output_format {
+            "DXT5" => 5,
+            "DXT1" => 1,
+            _ => 0,
+        };
+        data.write_u32::<LittleEndian>(format_val)
+            .map_err(|e| e.to_string())?;
+        data.write_u32::<LittleEndian>(width)
+            .map_err(|e| e.to_string())?;
+        data.write_u32::<LittleEndian>(height)
             .map_err(|e| e.to_string())?;
         data.write_u32::<LittleEndian>(mip_count as u32)
             .map_err(|e| e.to_string())?;
@@ -5017,9 +5035,12 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
             xpress::decompress(&comp_face, decomp_face_len)?
         };
 
+        println!("[RUST] Collision mesh pool append: {} collision meshes, decomp_mesh={} bytes, decomp_face={} bytes", model.collision_meshes.len(), decomp_mesh.len(), decomp_face.len());
+
         // Append collision mesh vertices to mesh stream
         for cm in &model.collision_meshes {
             for part in &cm.mesh.parts {
+                println!("[RUST]   Collision part: {} vertices, {} indices, mask=0x{:x}", part.vertices.len(), part.indices.len(), part.vertex_mask);
                 let mut vertex_stride = 0u32;
                 if (part.vertex_mask & 0x01) != 0 { vertex_stride += 16; }
                 if (part.vertex_mask & 0x02) != 0 { vertex_stride += 16; }
@@ -5051,6 +5072,8 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
         // Re-compress and rewrite pool
         let new_comp_mesh = xpress::compress_or_raw(&decomp_mesh);
         let new_comp_face = xpress::compress_or_raw(&decomp_face);
+
+        println!("[RUST] After collision append: decomp_mesh={} bytes, decomp_face={} bytes, new_comp_mesh={} bytes, new_comp_face={} bytes", decomp_mesh.len(), decomp_face.len(), new_comp_mesh.len(), new_comp_face.len());
 
         let mut new_pool = Vec::new();
         new_pool.write_u32::<LittleEndian>(_pool_type).map_err(|e| e.to_string())?;

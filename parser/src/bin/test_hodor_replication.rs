@@ -128,17 +128,35 @@ fn build_model_from_assets(dir: &Path) -> Result<HODModel, String> {
     let mut texture_names: Vec<String> = fs::read_dir(dir)
         .map_err(|e| e.to_string())?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("tga"))
+        .filter(|path| {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("tga"))
+                .unwrap_or(false)
+        })
         .filter_map(|path| path.file_stem()?.to_str()?.to_string().into())
         .collect();
     texture_names.sort();
 
     let mut textures = Vec::new();
     for tex_name in &texture_names {
-        textures.push(load_tga_texture(
-            &dir.join(format!("{}.tga", tex_name)),
-            tex_name,
-        )?);
+        // Find the actual TGA file with any extension case
+        let tga_path = fs::read_dir(dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .find(|path| {
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(|s| s == tex_name)
+                    .unwrap_or(false)
+                    && path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext.eq_ignore_ascii_case("tga"))
+                        .unwrap_or(false)
+            })
+            .ok_or_else(|| format!("No TGA file found for texture '{}'", tex_name))?;
+        textures.push(load_tga_texture(&tga_path, tex_name)?);
     }
     println!("     Loaded {} textures", textures.len());
 
@@ -254,6 +272,18 @@ fn build_model_from_assets(dir: &Path) -> Result<HODModel, String> {
         Vec::new()
     };
     println!("     Loaded {} collision meshes", collision_meshes.len());
+
+    // Filter textures to only those referenced by materials
+    let referenced_textures: std::collections::HashSet<String> = materials
+        .iter()
+        .flat_map(|m| m.texture_maps.iter().cloned())
+        .collect();
+    println!("     Referenced textures: {:?}", referenced_textures);
+    let textures: Vec<_> = textures
+        .into_iter()
+        .filter(|t| referenced_textures.contains(&t.name))
+        .collect();
+    println!("     Filtered textures: {} (from referenced)", textures.len());
 
     Ok(HODModel {
         version: 512,
