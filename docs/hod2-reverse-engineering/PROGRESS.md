@@ -9,7 +9,9 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ## Current Status
 
 **Phase:** Phase 4 Ongoing (In-Game Rendering Issues)  
-**Status:** Spikiness still present in-game. Created `pool_byte_diff` diagnostic tool. Discovered major asymmetries in `hod.rs` generation vs HODOR:
+**Status:** Compression fixes complete; Vertex data divergence is root cause of spikiness  
+**Last Updated:** 2026-05-28 23:00 UTC  
+**Updated By:** OpenCode Agent (handoff from Antigravity Agent)
 1. **Face Pool Size Mismatch:** Generated face pool is 37,704 bytes vs HODOR's 65,286 bytes. HODOR contains an extra ~27KB of index data at the end.
 2. **Vertex Data Divergence:** Normals, Tangents, and Binormals differ on 10,000+ vertices. Binormals differ on ~15,000 vertices, which is likely the cause of the spikiness.
 3. **Save_edits Alignment Bug:** Collision mesh face pool appending lacks 2-byte alignment.
@@ -150,14 +152,22 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ### Current Issues
 
-1. **Vertex Spikiness in Engine:** Rendering is spiky in-game for `ter_centaur` despite Xpress compression Type 5 elimination. 
-2. **Face Pool Size Mismatch:** HODOR generates a 65,286 byte decompressed face pool vs our 37,704 byte pool (a 27KB discrepancy at the tail end, right after the main geometry indices).
-3. **Vertex Data Discrepancy:** Byte-level comparisons show massive differences in normals, tangents, and binormals (~15,000 vertices). Binormal divergence is likely causing the visual spikiness in-game.
-4. **Serialization Asymmetries:** 
+1. **Vertex Data Divergence (ROOT CAUSE of spikiness):** Normals, Tangents, and Binormals differ on 10,000+ vertices between HODOR and generated HODs. Binormals differ on ~15,000 vertices. The engine relies on these for lighting/shading. Fix `compiler::compute_tangent_space`.
+2. **Face Pool Size Mismatch:** HODOR generates 65,286 bytes vs our 37,704 bytes for ter_centaur. HODOR appends ~27KB of extra index data at the end. Need to determine what this data is.
+3. **Serialization Asymmetries:**
    - `save_edits` face pool appending lacks 2-byte alignment.
-   - `save_edits` vertex stride calculation is missing `0x04` (color).
+   - `save_edits` vertex stride calculation is missing `0x04` (color) mask.
    - `prim_group_count` is inconsistent between v1 and v2, read vs write.
-5. **Testing Blindspots:** `verify_lossless` only checks structure counts and round-trip parsing, but **does not verify mesh data integrity**. Files can pass verify_lossless while containing completely broken mesh geometry.
+4. **Testing Blindspot:** `verify_lossless` only checks structure counts, not mesh data integrity. `pool_byte_diff` should be used for vertex generation accuracy.
+
+### Next Steps
+
+1. Fix `compiler::compute_tangent_space` to match HODOR's tangent/binormal generation
+2. Investigate why HODOR appends ~27KB extra to the face pool
+3. Fix `save_edits` 2-byte alignment bug
+4. Fix `save_edits` missing `0x04` color mask in stride calculation
+5. Fix `prim_group_count` inconsistency between v1/v2
+6. Run `pool_byte_diff` after tangent fix to verify vertex parity
 
 ---
 
