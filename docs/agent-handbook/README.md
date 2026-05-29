@@ -77,7 +77,7 @@ It is an established pattern in this repo for agents to write temporary, throwaw
 1. **Understand Request**: Is this a UI feature or a binary format fix?
 2. **Context Gathering**:
    - UI Feature: Read `docs/ui-source-of-truth/` to see the current constraints.
-   - Binary Fix: Read `agents_info/hod2_reverse_engineering_knowledge_base.md`.
+   - Binary Fix: Read `docs/hod2-reverse-engineering/hod2_reverse_engineering_knowledge_base.md`.
 3. **Execution**:
    - Implement the fix.
    - Run `npm run build` (for frontend) or `cargo check` (for backend/parser).
