@@ -13,6 +13,7 @@ interface InspectorProps {
   selectedAnimIdx?: number;
   visibleMeshes?: Record<string, boolean>;
   onToggleVisibility?: (meshKey: string) => void;
+  onConfigureShaders?: () => void;
 }
 
 const quatToEulerDegrees = (q: { x: number; y: number; z: number; w: number }) => {
@@ -417,6 +418,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   selectedAnimIdx,
   visibleMeshes,
   onToggleVisibility,
+  onConfigureShaders,
 }) => {
   const [pipelines, setPipelines] = useState<string[]>([]);
   const [renameWeaponName, setRenameWeaponName] = useState("");
@@ -2101,13 +2103,24 @@ export const Inspector: React.FC<InspectorProps> = ({
                 <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "500" }}>
                   Shader / Pipeline Name
                 </label>
-                <button
-                  onClick={loadPipelines}
-                  style={{ fontSize: "10px", padding: "2px 8px", background: "var(--accent-cyan)", color: "#000", border: "none", borderRadius: "3px", cursor: "pointer", fontWeight: "600" }}
-                  title="Reload shaders from configured directories"
-                >
-                  Refresh
-                </button>
+                <div style={{ display: "flex", gap: "4px" }}>
+                  {onConfigureShaders && (
+                    <button
+                      onClick={onConfigureShaders}
+                      style={{ fontSize: "10px", padding: "2px 8px", background: "#ff9800", color: "#000", border: "none", borderRadius: "3px", cursor: "pointer", fontWeight: "600" }}
+                      title="Configure shader directories"
+                    >
+                      Configure
+                    </button>
+                  )}
+                  <button
+                    onClick={loadPipelines}
+                    style={{ fontSize: "10px", padding: "2px 8px", background: "var(--accent-cyan)", color: "#000", border: "none", borderRadius: "3px", cursor: "pointer", fontWeight: "600" }}
+                    title="Reload shaders from configured directories"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <select

@@ -1306,6 +1306,7 @@ function App() {
           selectedAnimIdx={selectedAnimIdx}
           visibleMeshes={visibleMeshes}
           onToggleVisibility={(meshKey) => setVisibleMeshes(prev => ({ ...prev, [meshKey]: prev[meshKey] === false ? true : false }))}
+          onConfigureShaders={selectAndSaveKeeperPath}
         />
       </div>
 
