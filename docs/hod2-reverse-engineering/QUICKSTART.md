@@ -12,6 +12,8 @@ This project reverse engineers the HOD 2.0 file format used by Homeworld Remaste
 - Convert HOD 1.0 to HOD 2.0
 - Import DAE files to HOD 2.0
 
+**Read `architecture-overview.md` immediately to understand the high-level workflow.**
+
 ### Step 2: Check Current Status
 
 **Read `PROGRESS.md` immediately.**

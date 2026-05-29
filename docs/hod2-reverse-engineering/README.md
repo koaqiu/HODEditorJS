@@ -14,6 +14,7 @@ This directory contains all documentation and analysis for reverse engineering t
 ```
 docs/hod2-reverse-engineering/
 ├── README.md                          # This file
+├── architecture-overview.md           # High-level editor workflow and pipeline objective
 ├── PROGRESS.md                        # Progress tracking (UPDATE REGULARLY)
 ├── QUICKSTART.md                      # Quick start guide for new agents
 ├── testing-guide.md                   # How to run pebble tests

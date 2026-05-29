@@ -162,6 +162,12 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ## Decision Log
 
+### 2026-05-29: Pipeline Workflow Consolidation
+
+**Decision:** Formally documented the full data transmutation pipeline (OBJ -> DAEnerys -> HODOR) in `daenerys-obj-to-dae-pipeline.md` and `architecture-overview.md`.
+**Reason:** Clarifies the overarching project goal: skipping intermediate toolchain steps while perfectly replicating the internal data transmutation (pre-flattening via Assimp, tangent space generation, vertex deduplication, and Xpress compression) inside the UI editor.
+**Impact:** New agents now have a cohesive architectural document ensuring they do not miss crucial data preparation stages required for in-game compatibility.
+
 ### 2026-05-29: Fixed Xpress Compression Type 2 Bug
 
 **Decision:** Fixed `find_best_match_type` in `xpress.rs` to limit Type 2 matches to a maximum offset of 1023 (was incorrectly 4095).
