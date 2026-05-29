@@ -396,12 +396,7 @@ fn get_shader_pipelines(keeper_path: Option<String>) -> Result<Vec<String>, Stri
             keeper_path
         ),
     );
-    let mut pipelines = vec![
-        "ship".to_string(),
-        "badge".to_string(),
-        "bay".to_string(),
-        "thruster".to_string(),
-    ]; // base defaults
+    let mut pipelines: Vec<String> = Vec::new();
 
     if let Some(path_str) = keeper_path {
         let keeper_file = std::path::Path::new(&path_str);
