@@ -196,21 +196,27 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   // Material Addition State
   const [isAddMatOpen, setIsAddMatOpen] = useState(false);
   const [newMatName, setNewMatName] = useState("");
-  const [newMatShader, setNewMatShader] = useState("ship");
+  const [newMatShader, setNewMatShader] = useState("");
   const [pipelines, setPipelines] = useState<string[]>([]);
 
-  React.useEffect(() => {
-    const loadPipelines = async () => {
-      try {
-        const config = await invoke<{ shader_directories: string[] }>("load_shader_config");
-        if (config.shader_directories.length > 0) {
-          const list = await invoke<string[]>("get_shader_pipelines", { keeperPaths: config.shader_directories });
-          setPipelines(list);
+  const loadPipelines = async () => {
+    try {
+      const config = await invoke<{ shader_directories: string[] }>("load_shader_config");
+      if (config.shader_directories.length > 0) {
+        const list = await invoke<string[]>("get_shader_pipelines", { keeperPaths: config.shader_directories });
+        setPipelines(list);
+        if (!newMatShader && list.length > 0) {
+          setNewMatShader(list[0]);
         }
-      } catch (e) {
-        console.error("Failed to load shader pipelines:", e);
+      } else {
+        setPipelines([]);
       }
-    };
+    } catch (e) {
+      console.error("Failed to load shader pipelines:", e);
+    }
+  };
+
+  React.useEffect(() => {
     loadPipelines();
   }, []);
 

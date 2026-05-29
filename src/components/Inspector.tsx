@@ -422,18 +422,21 @@ export const Inspector: React.FC<InspectorProps> = ({
   const [renameWeaponName, setRenameWeaponName] = useState("");
   const [sourceMeshName, setSourceMeshName] = useState("");
 
-  useEffect(() => {
-    const loadPipelines = async () => {
-      try {
-        const config = await invoke<{ shader_directories: string[] }>("load_shader_config");
-        if (config.shader_directories.length > 0) {
-          const list = await invoke<string[]>("get_shader_pipelines", { keeperPaths: config.shader_directories });
-          setPipelines(list);
-        }
-      } catch (e) {
-        console.error("Failed to load shader pipelines:", e);
+  const loadPipelines = async () => {
+    try {
+      const config = await invoke<{ shader_directories: string[] }>("load_shader_config");
+      if (config.shader_directories.length > 0) {
+        const list = await invoke<string[]>("get_shader_pipelines", { keeperPaths: config.shader_directories });
+        setPipelines(list);
+      } else {
+        setPipelines([]);
       }
-    };
+    } catch (e) {
+      console.error("Failed to load shader pipelines:", e);
+    }
+  };
+
+  useEffect(() => {
     loadPipelines();
   }, []);
 
@@ -2094,34 +2097,33 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "11px", color: "var(--text-secondary)", fontWeight: "500", marginBottom: "6px" }}>
-                Shader / Pipeline Name
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "500" }}>
+                  Shader / Pipeline Name
+                </label>
+                <button
+                  onClick={loadPipelines}
+                  style={{ fontSize: "10px", padding: "2px 8px", background: "var(--accent-cyan)", color: "#000", border: "none", borderRadius: "3px", cursor: "pointer", fontWeight: "600" }}
+                  title="Reload shaders from configured directories"
+                >
+                  Refresh
+                </button>
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <select
-                  value={pipelines.includes(material.shader_name) ? material.shader_name : "custom"}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val !== "custom") {
-                      handleShaderChange(val);
-                    } else {
-                      handleShaderChange("");
-                    }
-                  }}
+                  value={material.shader_name || ""}
+                  onChange={(e) => handleShaderChange(e.target.value)}
                   style={{ width: "100%" }}
                 >
+                  <option value="">-- Select Shader --</option>
                   {pipelines.map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
-                  <option value="custom">(Custom shader/pipeline...)</option>
                 </select>
-                {(!pipelines.includes(material.shader_name) || !material.shader_name) && (
-                  <input
-                    type="text"
-                    placeholder="Enter custom shader name..."
-                    value={material.shader_name}
-                    onChange={(e) => handleShaderChange(e.target.value)}
-                  />
+                {pipelines.length === 0 && (
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", fontStyle: "italic" }}>
+                    No shaders loaded. Configure shader directories in Settings.
+                  </div>
                 )}
               </div>
             </div>
