@@ -33,33 +33,39 @@ HODOR-generated HOD files are allowed only as an oracle for parsing, comparison,
 
 ## Standard Update Format
 
-Use this format for progress summaries:
+Use this format for progress summaries in `PROGRESS.md`:
 
 ```markdown
 **Objective**
-- One sentence describing the current HODOR replication target.
+- One sentence describing the current feature or fix target.
 
 **Current Status**
 - What works now, stated narrowly.
 - What is still missing, stated plainly.
 
-**Inputs Used**
-- Allowed source inputs used by the current test.
-- Explicitly state that `model.json` is not used.
-
-**Completed Since Last Update**
+**Completed Since Last Update (Successes)**
 - Concrete code/doc/test changes.
+- Exact file paths and line number logic modified.
+- Include exact success messages or metric improvements.
 
-**Validation**
-- Commands run.
+**What Failed / Remains Broken**
+- Specific error messages, file:line locations.
+- Root cause analysis if known. Never leave broken code without logging the error.
+
+**Caveats & Quirks Found**
+- Any strange behavior, unexpected limitations, or non-standard workarounds used to satisfy the game engine or UI framework.
+- Ensure these are also permanently logged in `docs/hod2-reverse-engineering/hod2_reverse_engineering_knowledge_base.md`.
+
+**Validation & Test Results**
+- Commands run (e.g. `cargo run --bin verify_lossless`).
 - Pass/fail counts.
-- Any meaningful mismatches.
+- Any meaningful mismatches or UI screenshots taken.
+
+**Commit Checkpoint**
+- Note the Git Commit hash or message used to checkpoint this work session.
 
 **Next Target**
 - The next small implementation step.
-
-**Risks / Open Questions**
-- Anything that could invalidate the result or still needs in-game/HODOR confirmation.
 ```
 
 ## Rules
@@ -70,3 +76,4 @@ Use this format for progress summaries:
 - Separate parser/writer round-trip success from HODOR behavior replication.
 - Report exact tests run and what those tests compare.
 - Prefer small, validated milestones over broad percentage-complete claims.
+- **Commit Checkpoints**: Before ending any session, run `git add . && git commit -m "..."` to save your work, and document the checkpoint in your final update.

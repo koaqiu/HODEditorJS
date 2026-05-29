@@ -25,10 +25,13 @@ This handbook will explain:
 1. **`docs/hod2-reverse-engineering/PROGRESS.md`** — Update the "Current Status" section, "Current Issues" list, and "Planned Tasks" with what was fixed, what broke, and what's next. This is the **ONLY** file you must update for tracking daily progress!
 2. **`docs/README.md` (Knowledge Graph)** — If you create any *new* permanent specification document or directory, you MUST add a link to it in this file so other agents can find it. Do not link temporary or stale logs here.
 
+3. **`docs/hod2-reverse-engineering/hod2_reverse_engineering_knowledge_base.md`** — If you discover a new binary format quirk, endianness trap, or undocumented engine constraint, you MUST add it here as a permanent caveat.
+
 ### What to Document
 
-- **What was fixed** — specific file:line references and what the fix does.
-- **What's still broken** — specific error messages, file:line locations, and root cause analysis if known.
+- **What was fixed / succeeded** — specific file:line references and what the fix does. Include exact success messages or metric improvements.
+- **What failed / remains broken** — specific error messages, file:line locations, and root cause analysis if known. Never leave broken code without logging the error.
+- **Caveats & Quirks found** — Any strange behavior, unexpected limitations, or non-standard workarounds used to satisfy the game engine.
 - **Test results** — exact command output (pass/fail counts, error messages).
 - **Decisions made** — why a particular approach was chosen over alternatives.
 - **Blockers** — what prevents progress and what would unblock it.
