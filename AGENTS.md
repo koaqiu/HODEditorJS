@@ -22,9 +22,8 @@ This handbook will explain:
 
 ### What to Update
 
-1. **`docs/hod2-reverse-engineering/PROGRESS.md`** — Update the "Current Status" section, "Current Issues" list, and "Planned Tasks" with what was fixed, what broke, and what's next.
-2. **`docs/hod2-reverse-engineering/from-assets-to-hod-analysis.md`** — Update "What is not complete" and "Next Targets" sections.
-3. **`docs/hod2-reverse-engineering/hodor-replication-test-success.md`** — Update "Current Result" with latest test output and "Next Steps".
+1. **`docs/hod2-reverse-engineering/PROGRESS.md`** — Update the "Current Status" section, "Current Issues" list, and "Planned Tasks" with what was fixed, what broke, and what's next. This is the **ONLY** file you must update for tracking daily progress!
+2. **`docs/README.md` (Knowledge Graph)** — If you create any *new* permanent specification document or directory, you MUST add a link to it in this file so other agents can find it. Do not link temporary or stale logs here.
 
 ### What to Document
 

@@ -621,18 +621,17 @@ pub fn generate_pool_data(
         }
     }
 
-    // Force raw (uncompressed) mesh and face streams — no xpress compression.
-    // When comp_len == decomp_len, the parser reads raw bytes without decompression.
+    // Compress the mesh and face streams using Xpress compression.
     let comp_mesh = if decomp_mesh.is_empty() {
         Vec::new()
     } else {
-        decomp_mesh.clone()
+        crate::xpress::compress_or_raw(&decomp_mesh)
     };
 
     let comp_face = if decomp_face.is_empty() {
         Vec::new()
     } else {
-        decomp_face.clone()
+        crate::xpress::compress_or_raw(&decomp_face)
     };
 
     let mut pool_buf = Vec::new();

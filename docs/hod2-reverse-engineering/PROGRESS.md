@@ -162,6 +162,21 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ## Decision Log
 
+### 2026-05-29: Documentation Restructuring & Knowledge Graph
+**Decision:** Created `docs/README.md` to serve as a central Knowledge Graph, bridging the UI source of truth, active backend specifications, and agent handbooks. Moved all stale phase logs and legacy test results into `archive_logs/`.
+**Reason:** The root `docs/` folder became heavily cluttered with outdated historical tracking plans. Future agents need a strict separation between "what is true today" (active spec) and "what happened last week" (archived log) to prevent regressions.
+**Result:** Documentation is now strictly separated by active specs vs historical tracking.
+
+### 2026-05-29: DAE Dummy Node Filtering (DAEnerys Mismatches)
+**Decision:** Updated `parser/src/dae.rs` to trap and ignore `ROOT_LOD[x]`, `ROOT_COL`, `HOLD_`, `UVSets[`, and `COL[` prefixes when building the structural hierarchy. Children of these nodes are directly parented to `"Root"`.
+**Reason:** DAEnerys wrapper nodes caused the editor to misinterpret dummy assembly layers as actual joints in the final HOD 2.0 output. HODOR inherently strips these.
+**Result:** Imported DAE files now produce a clean hierarchy identical to vanilla HOD 2.0 expectations.
+
+### 2026-05-29: HOD 1.0 Inline Texture Extraction Fix
+**Decision:** Updated `parser/src/hod.rs` texture parsing to support the flat `LMIP` 32-byte header + inline raw pixel data fallback for legacy files, and added stripping of absolute path files to get pure names.
+**Reason:** Some HOD 1.0 mods baked raw system paths directly into the material name structure and lacked the explicit `MIPS` sub-chunk container. Our parser was previously missing the images.
+**Result:** HOD 1.0 textures load flawlessly without naming collisions.
+
 ### 2026-05-29: Frontend Integration & Pipeline Validation
 
 **Decision:** Verified frontend UI compatibility with the new Rust backend logic for HOD 1.0, DAE, and OBJ imports. Updated UI messages to explicitly indicate "HOD 2.0" compilation.
@@ -256,14 +271,14 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ### Internal Documentation
 
+- [**Knowledge Graph (Central Hub)**](../../README.md)
 - [HOD 2.0 Creation Specification](hod2-creation-specification.md)
-- [Phase 1 Summary](phase1-summary.md)
-- [Phase 2 Gap Analysis](phase2-gap-analysis.md)
+- [DAE Pipeline Specification](daenerys-obj-to-dae-pipeline.md)
 - [Testing Guide](testing-guide.md)
-- [RODOH Conversion Analysis](rodoh-hod-conversion-analysis.md)
-- [MS Xpress Rewrite Plan](xpress-rewrite-plan.md)
-- [Knowledge Base](../../agents_info/hod2_reverse_engineering_knowledge_base.md)
-- [Serialization Walkthrough](../../agents_info/hod2_serialization_walkthrough.md)
+- [Knowledge Base](../../../agents_info/hod2_reverse_engineering_knowledge_base.md)
+- [Serialization Walkthrough](../../../agents_info/hod2_serialization_walkthrough.md)
+
+*Note: Phase summaries and legacy fix plans have been moved to `archive_logs/`.*
 
 ### Source Code
 

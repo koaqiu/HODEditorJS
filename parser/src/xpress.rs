@@ -197,7 +197,7 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
         let mut best_length = 0usize;
         let mut best_offset = 0usize;
 
-        while start != -1 && chain_len < 256 {
+        while start != -1 && chain_len < 4096 {
             let start_idx = start as usize;
             let offset = pos - start_idx;
             if offset > 0x1FFFFF {
@@ -249,12 +249,28 @@ pub fn compress(input: &[u8]) -> Vec<u8> {
             indicator_bit = 0;
         }
 
+        // Lazy matching: if we have a match here, check if the NEXT position has a BETTER match!
         if let Some((offset, length, mt)) = match_at[input_idx] {
-            // Match — set indicator bit, encode match
-            indicator |= 1 << indicator_bit;
-            indicator_bit += 1;
-            encode_match(&mut compressed, mt, offset, length);
-            input_idx += length;
+            let mut take_current = true;
+            if input_idx + 1 < input_len {
+                if let Some((next_offset, next_length, _)) = match_at[input_idx + 1] {
+                    // If next match is strictly better (longer and compensates for the 1 literal we'd have to write)
+                    if next_length > length + 1 {
+                        take_current = false;
+                    }
+                }
+            }
+
+            if take_current {
+                indicator |= 1 << indicator_bit;
+                indicator_bit += 1;
+                encode_match(&mut compressed, mt, offset, length);
+                input_idx += length;
+            } else {
+                indicator_bit += 1;
+                compressed.push(input[input_idx]);
+                input_idx += 1;
+            }
         } else {
             // Literal — bit stays 0, write one byte
             indicator_bit += 1;
@@ -307,7 +323,10 @@ fn find_best_match_type(offset: usize, length: usize) -> Option<usize> {
 
     // Type 7: 4-byte, len_code 0-255 (length 3-258), offset 0-2097151
     if len_code < 0x100 && offset <= 0x1FFFFF {
-        return Some(7);
+        // Prevent bloat: do not encode a 3-byte match as a 4-byte token!
+        if length >= 4 {
+            return Some(7);
+        }
     }
 
     None

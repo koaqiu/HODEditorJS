@@ -29,7 +29,7 @@ This is a **Tauri** desktop application with three major structural boundaries:
 - The `save_edits` function and `original_needs_full_v2_regeneration` logic are DEPRECATED. They only exist as a fallback for edge cases and should not be relied upon.
 - Unparsed chunks from the original file (like `KDOP`, `COLD`, `SCAR`, `INFO`) must be preserved in `HODModel` as raw bytes and written back to the output during generation.
 
-This architecture is documented in `agents_info/implementation_plan.md`.
+This architecture is documented in `docs/hod2-reverse-engineering/architecture-overview.md`.
 
 ## 2. Reading the UI Source of Truth
 
@@ -46,8 +46,8 @@ The `docs/ui-source-of-truth/README.md` file dictates strict rules:
 Working with the binary parser is highly sensitive. The HOD 2.0 format has several extremely volatile architectural quirks.
 
 Before making changes to the parser, read:
-- `agents_info/hod2_reverse_engineering_knowledge_base.md`: Contains the foundational reverse-engineering knowledge (Flat file structure, Endianness inconsistencies, MULT chunk padding, POOL compression, etc.).
-- `agents_info/hod2_serialization_walkthrough.md`: A historical log of how the HOD 2.0 serialization was implemented.
+- `docs/README.md`: The central **Knowledge Graph** bridging all active specifications and legacy reverse-engineering knowledge.
+- `docs/hod2-reverse-engineering/hod2-creation-specification.md`: The central file format specification.
 - `.opencode/skills/hod-binary-layout/SKILL.md`: The definitive byte-layout spec for DTRM sub-chunks (NAVL, BURN, GLOW, etc.).
 
 **CRITICAL PARSER RULE:** If you change *any* serialization logic in `parser/src/hod.rs` or `parser/src/compiler.rs`, you **MUST** run the lossless verification suite to prove you didn't break the game engine format.
