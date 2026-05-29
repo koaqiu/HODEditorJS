@@ -27,6 +27,13 @@ fn parse_int_array(node: Node) -> Result<Vec<usize>, String> {
     }
 }
 
+/// Extract value between brackets after a prefix, e.g. "_Sz[12]" → "12"
+fn extract_bracket_value<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
+    let start = text.find(prefix)? + prefix.len();
+    let end = text[start..].find(']')? + start;
+    Some(&text[start..end])
+}
+
 pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
     let doc = Document::parse(xml_str).map_err(|e| e.to_string())?;
 
@@ -477,23 +484,54 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
             rotation_euler: None,
         });
     } else if is_navl {
+        // Parse navlight attributes from name string:
+        // NAVL[name]_Sz[size]_Ph[phase]_Fr[freq]_Col[r,g,b]_Dist[dist]_Flags[flags]
+        let full_name = node.attribute("name").unwrap_or("");
+        let size = extract_bracket_value(full_name, "_Sz[")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(10.0);
+        let phase = extract_bracket_value(full_name, "_Ph[")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let frequency = extract_bracket_value(full_name, "_Fr[")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let (cr, cg, cb) = extract_bracket_value(full_name, "_Col[")
+            .and_then(|v| {
+                let parts: Vec<f32> = v.split(',').filter_map(|s| s.parse().ok()).collect();
+                if parts.len() >= 3 { Some((parts[0], parts[1], parts[2])) } else { None }
+            })
+            .unwrap_or((1.0, 1.0, 1.0));
+        let distance = extract_bracket_value(full_name, "_Dist[")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(1000.0);
+        let style = extract_bracket_value(full_name, "_Flags[")
+            .unwrap_or("default")
+            .to_string();
+
         model.nav_lights.push(HODNavLight {
             name: name.clone(),
             section: 0,
-            size: 10.0,
-            phase: 0.0,
-            frequency: 0.0,
-            style: "default".to_string(),
-            color: Vector3 {
-                x: 1.0,
-                y: 1.0,
-                z: 1.0,
-            },
-            distance: 1000.0,
+            size,
+            phase,
+            frequency,
+            style,
+            color: Vector3 { x: cr, y: cg, z: cb },
+            distance,
             sprite_visible: true,
             high_end_only: false,
         });
-        // Real parsing of [Sz_xx] from name string can be done later if needed
+        // Also create a joint so the frontend can parent the navlight
+        // in the hierarchy tree. Without this, rootNavLights filter
+        // places it at the root level since no matching joint exists.
+        model.joints.push(HODJoint {
+            name: name.clone(),
+            parent_name: p_name.clone(),
+            local_transform: transform.clone(),
+            position: None,
+            rotation: None,
+            scale: None,
+        });
     } else if is_burn {
         model.engine_burns.push(HODEngineBurn {
             name: name.clone(),
