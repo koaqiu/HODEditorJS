@@ -9,8 +9,8 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ## Current Status
 
 **Phase:** Phase 4 Ongoing  
-**Status:** Xpress compression incompatibility affects ALL pools. Hybrid swap tests completed. Implementing compression bypass workaround.  
-**Last Updated:** 2026-05-29 01:15 UTC  
+**Status:** BREAKTHROUGH: Game engine uses zlib inflate, NOT MS Xpress LZ77. Need to switch compressor.  
+**Last Updated:** 2026-05-29 02:00 UTC  
 **Updated By:** OpenCode Agent
 
 ---
@@ -145,33 +145,29 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ### Current Issues
 
-1. **Xpress Compression Incompatibility (PROVEN ROOT CAUSE):** Our Xpress compressor produces byte patterns that the game engine's decompressor cannot handle. This affects ALL three POOL streams (texture, mesh, face).
+1. **ROOT CAUSE IDENTIFIED — Wrong Compression Algorithm:** Ghidra reverse-engineering revealed the game engine uses **zlib inflate** (standard deflate/inflate), NOT MS Xpress LZ77. The decompression function at `0x806ed9` is a 5396-byte zlib inflate implementation. Our MS Xpress compressor produces bytes the engine can't decompress because the engine doesn't use MS Xpress.
 
-2. **Hybrid Swap Test Results (ter_centaur):**
-   - `hybrid_tex_from_hodor.hod` (tex=HODOR, mesh/gen, face/gen) → FAIL: full spikiness
-   - `hybrid_mesh_from_hodor.hod` (tex/gen, mesh=HODOR, face/gen) → FAIL: vertices confined but textures rainbow
-   - `hybrid_face_from_hodor.hod` (tex/gen, mesh/gen, face=HODOR) → FAIL: full spikiness
-   - `hybrid_all_from_hodor.hod` (all=HODOR) → **PASS: renders correctly**
-   - `hybrid_mesh_uncompressed.hod` (tex/gen, mesh=uncomp, face/gen) → FAIL: same as mesh=HODOR
-   - Conclusion: ALL pools must use HODOR's compressed bytes. The face pool and texture pool compression is also broken, not just mesh.
+2. **XOR Obfuscation Layer:** `FUN_0077daf0` (57 bytes) applies byte-by-byte XOR with a rotating key buffer. May only apply to `.big` archive data, not POOL streams. Needs testing.
 
-3. **Compression Fixes Already Applied (insufficient):**
+3. **Compression Fixes Already Applied (correct for MS Xpress, but engine uses zlib):**
    - Changed indicator word from 31-bit to 32-bit
    - Added Type 4 match handling (3-byte, offset up to 65535)
-   - Remaining differences in match selection strategy
 
-4. **Face Pool Size Mismatch:** HODOR generates 65,286 bytes vs our 37,704 bytes for ter_centaur. HODOR appends ~27KB of extra index data at the end.
+4. **Face Pool Size Mismatch:** HODOR generates 65,286 bytes vs our 37,704 bytes for ter_centaur.
 
 5. **Serialization Asymmetries:**
    - `save_edits` face pool appending lacks 2-byte alignment.
    - `save_edits` vertex stride calculation is missing `0x04` (color) mask.
-   - `prim_group_count` is inconsistent between v1 and v2, read vs write.
-6. **Uncompressed Textures Look Blocky:** With the compression bypass workaround, textures render blocky in-game instead of smooth. This is likely because the texture pool is now raw RGBA instead of DXT-compressed, and the game engine expects DXT data for proper GPU texture sampling. The texture pool compression may need a different approach than the mesh/face pools — possibly using a standard DXT compressor without Xpress wrapping.
+   - `prim_group_count` is inconsistent between v1 and v2.
+
+6. **Uncompressed Textures Look Blocky:** DXT encoder quality issue, separate from compression.
 
 ### Next Steps
 
-1. **Implement compression bypass workaround** — set `comp_size == decomp_size` for all pools so files render correctly in-game (larger files but correct rendering)
-2. **Reverse-engineer game engine decompressor** — use Ghidra to disassemble `HomeworldRM.exe` `ArchiveCompressStream` class
+1. **Test if POOL data is raw zlib** — compress decompressed mesh pool with zlib deflate, compare with HODOR's bytes
+2. **Replace MS Xpress compressor with zlib** — use `flate2` crate in `parser/src/xpress.rs`
+3. **Test in-game** — verify no spikiness and correct textures
+4. **Compare bytes with HODOR** — verify byte-for-byte match (or close enough)
 3. **Try Windows RtlCompressBuffer API** — the game engine might use the Windows NT compression API
 4. **Match HODOR's compressor byte-for-byte** — fix match selection strategy to produce identical bytes
 5. Fix face pool size mismatch (27KB missing data)

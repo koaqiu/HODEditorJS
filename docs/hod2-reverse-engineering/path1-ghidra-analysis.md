@@ -8,7 +8,98 @@ Disassemble `HomeworldRM.exe` to understand the exact decompression algorithm us
 
 **Started:** 2026-05-29  
 **Agent:** OpenCode Agent  
-**Phase:** Setup
+**Phase:** BREAKTHROUGH — Game engine uses zlib, NOT MS Xpress!
+
+## Key Finding
+
+The game engine's `ArchiveCompressStream` decompression uses **zlib inflate**, NOT MS Xpress LZ77!
+
+The decompression function at `0x806ed9` (5396 bytes) is a full zlib inflate implementation with:
+- States 0-30 (standard zlib inflate state machine)
+- CRC checks (`incorrect data check`, `incorrect length check`)
+- Gzip header parsing (`0x8b1f` magic)
+- Window size validation
+- Adler32 checksum verification
+
+Additionally, `FUN_0077daf0` (57 bytes) applies a **byte-by-byte XOR obfuscation** with a rotating key buffer before zlib decompression.
+
+**Decompression pipeline:**
+1. Read compressed data from file (0x1000 bytes at a time via `fread`)
+2. Apply XOR deobfuscation (rotating key buffer)
+3. Decompress with zlib inflate
+
+This explains why:
+- Our MS Xpress compressor produces bytes the engine can't decompress
+- Bypassing compression (raw data) works — the engine skips decompression entirely
+- The compressed bytes don't match any MS Xpress format
+
+## Implications
+
+We need to:
+1. **Compress with zlib deflate** instead of MS Xpress LZ77
+2. **Apply XOR obfuscation** after compression (if the engine expects it for POOL streams)
+3. OR: Check if POOL streams skip the obfuscation layer (the engine may only obfuscate .big archive data)
+
+## Recommended Next Steps
+
+### Step 1: Test if POOL data is raw zlib (no XOR)
+
+The XOR obfuscation (`FUN_0077daf0`) may only apply to `.big` archive data, not POOL streams. Test by compressing the decompressed mesh pool with zlib deflate and comparing with HODOR's bytes:
+
+```python
+import zlib
+decomp = open('decomp_mesh.bin', 'rb').read()
+compressed = zlib.compress(decomp, 6)  # default compression level
+# Compare with HODOR's bytes
+```
+
+If the first bytes match HODOR's (after accounting for the pool_type header), the POOL data is raw zlib.
+
+### Step 2: If raw zlib works, replace compressor
+
+Replace `compress_or_raw` in `parser/src/xpress.rs` to use zlib deflate:
+
+```rust
+pub fn compress_or_raw(input: &[u8]) -> Vec<u8> {
+    // Use zlib deflate instead of MS Xpress
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(input).unwrap();
+    encoder.finish().unwrap()
+}
+```
+
+This requires adding `flate2` to `Cargo.toml`.
+
+### Step 3: If XOR is needed, implement it
+
+If the POOL data also has XOR obfuscation, implement `FUN_0077daf0`:
+
+```rust
+fn xor_deobfuscate(data: &mut [u8], key: &[u8]) {
+    for (i, byte) in data.iter_mut().enumerate() {
+        *byte = byte.wrapping_add(key[i % key.len()]);
+    }
+}
+```
+
+### Step 4: Test in-game
+
+After switching to zlib compression:
+1. Run `cargo run --bin test_hodor_replication`
+2. Load generated HOD in-game
+3. Verify no spikiness and correct textures
+
+### Step 5: Compare bytes with HODOR
+
+After zlib compression works, compare our compressed bytes with HODOR's to verify byte-for-byte match (or close enough).
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `ghidra-decomp-output.txt` | Full decompiled output of the decompression function |
+| `tools/ghidra_decompress.py` | Ghidra headless analysis script |
+| `tools/ghidra_targeted.py` | Targeted decompilation script |
 
 ## Prerequisites
 
@@ -177,9 +268,12 @@ The game engine might differ from our implementation in:
 | 2026-05-29 | Install Java | ✅ Complete | Java 21 OpenJDK in distrobox esp-dev |
 | 2026-05-29 | Download Ghidra | ✅ Complete | Ghidra 11.3.2 extracted to /tmp/ghidra_11.3.2_PUBLIC/ |
 | 2026-05-29 | Launch Ghidra | ✅ Running | GUI should be visible |
-| 2026-05-29 | Import HomeworldRM.exe | Pending | User action required |
-| 2026-05-29 | Auto-analyze | Pending | User action required |
-| 2026-05-29 | Find decompression code | Pending | User action required |
+| 2026-05-29 | Headless analysis | ✅ Complete | Used Ghidra headless to decompile functions |
+| 2026-05-29 | Find decompression code | ✅ Complete | Found at 0x806ed9 (5396 bytes, zlib inflate) |
+| 2026-05-29 | Find obfuscation code | ✅ Complete | Found at 0x77daf0 (57 bytes, XOR rotating key) |
+| 2026-05-29 | Document findings | ✅ Complete | Updated this file and saved decompilation output |
+| 2026-05-29 | Test zlib on POOL data | Pending | Next step |
+| 2026-05-29 | Replace compressor | Pending | After zlib test |
 
 ## How to Launch Ghidra
 
