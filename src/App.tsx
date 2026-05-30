@@ -766,7 +766,7 @@ function App() {
       return;
     }
 
-    setIsSaving(true);
+    setIsLoading(true);
     setStatusMsg("Saving HOD...");
     setErrorMsg(null);
 
@@ -782,7 +782,7 @@ function App() {
       setErrorMsg(e.toString());
       setStatusMsg("Failed to save HOD 2.0");
     } finally {
-      setIsSaving(false);
+      setIsLoading(false);
     }
   };
 
@@ -797,7 +797,7 @@ function App() {
       const selectedPath = await invoke<string | null>("select_save_hod_file", { defaultName });
       if (!selectedPath) return;
 
-      setIsSaving(true);
+      setIsLoading(true);
       setStatusMsg("Saving HOD As...");
       setErrorMsg(null);
 
@@ -815,13 +815,13 @@ function App() {
       setErrorMsg(err);
       alert(`Save As failed: ${e.toString()}`);
     } finally {
-      setIsSaving(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="app-container">
-      {isLoading && (
+      {(isLoading || isSaving) && (
         <div style={{
           position: "fixed",
           top: 0,
@@ -878,7 +878,7 @@ function App() {
         onImportDAEClick={selectAndImportDAE}
       />
 
-      {/* Main Workspace Panels */}
+{/* Main Workspace Panels */}
       <div className="workspace" style={{ gridTemplateColumns: `${sidebarWidth}px 1px 1fr 1px ${inspectorWidth}px` }}>
         {/* Left Side Hierarchy Node Tree */}
         <HierarchyTree
@@ -894,6 +894,8 @@ function App() {
           targetBoxes={targetBoxes}
           setTargetBoxes={setTargetBoxes}
           onTabChange={setActiveHierarchyTab}
+          setIsLoading={setIsLoading}
+          setStatusMsg={setStatusMsg}
         />
 
         {/* Sidebar Drag Separator Divider */}
@@ -1309,6 +1311,8 @@ function App() {
           visibleMeshes={visibleMeshes}
           onToggleVisibility={(meshKey) => setVisibleMeshes(prev => ({ ...prev, [meshKey]: prev[meshKey] === false ? true : false }))}
           onConfigureShaders={selectAndSaveKeeperPath}
+          setIsLoading={setIsLoading}
+          setStatusMsg={setStatusMsg}
         />
       </div>
 

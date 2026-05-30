@@ -230,6 +230,8 @@ const MeshLODInspector: React.FC<MeshLODInspectorProps> = ({ model, baseName, on
   const handleExportOBJ = async () => {
     if (!selectedLodMesh) return;
     try {
+      setIsLoading?.(true);
+      setStatusMsg?.("Exporting OBJ and MTL...");
       const { OBJExporter } = await import("three/examples/jsm/exporters/OBJExporter.js");
       const exporter = new OBJExporter();
       const tempGroup = buildThreeMeshFromState(selectedLodMesh);
@@ -238,6 +240,7 @@ const MeshLODInspector: React.FC<MeshLODInspectorProps> = ({ model, baseName, on
       objResult = `mtllib ${objFilename}.mtl\n` + objResult;
       const savedPath = await invoke<string | null>("save_text_file", { defaultName: `${objFilename}.obj`, filters: ["obj"], contents: objResult });
       if (savedPath) {
+        setStatusMsg?.("Saving materials...");
         const mtlLines: string[] = [];
         selectedLodMesh.parts.forEach((part) => {
           const hMat = model.materials?.[part.material_index];
@@ -253,6 +256,7 @@ const MeshLODInspector: React.FC<MeshLODInspectorProps> = ({ model, baseName, on
         alert(`Mesh exported to:\n${folderPath}`);
       }
     } catch (e: any) { console.error(e); alert(`Export failed: ${e.toString()}`); }
+    finally { setIsLoading?.(false); }
   };
 
   const handleImportOBJ = async () => {
@@ -260,6 +264,10 @@ const MeshLODInspector: React.FC<MeshLODInspectorProps> = ({ model, baseName, on
     try {
       const fileContent = await invoke<string | null>("load_text_file", { filters: ["obj"] });
       if (!fileContent) return;
+      
+      setIsLoading?.(true);
+      setStatusMsg?.("Importing OBJ...");
+      
       const { OBJLoader } = await import("three/examples/jsm/loaders/OBJLoader.js");
       const objGroup = new OBJLoader().parse(fileContent);
       const newParts: any[] = [];
@@ -290,6 +298,7 @@ const MeshLODInspector: React.FC<MeshLODInspectorProps> = ({ model, baseName, on
         alert(`Mesh "${selectedLodMesh.name}" LOD ${selectedLodMesh.lod} replaced by imported OBJ.`);
       } else { alert("No valid geometries found in the OBJ file."); }
     } catch (e: any) { console.error(e); alert(`Import failed: ${e.toString()}`); }
+    finally { setIsLoading?.(false); }
   };
 
   const handleAddLod = () => {
@@ -2003,6 +2012,9 @@ export const Inspector: React.FC<InspectorProps> = ({
 
       const handleImportTGA = async () => {
         try {
+          setIsLoading?.(true);
+          setStatusMsg?.("Importing TGA textures...");
+          
           const importedTexs = await invoke<any[] | null>("import_tga_textures");
           if (!importedTexs || importedTexs.length === 0) return;
 
@@ -2024,6 +2036,8 @@ export const Inspector: React.FC<InspectorProps> = ({
         } catch (e: any) {
           console.error(e);
           alert(`Failed to import TGA texture: ${e.toString()}`);
+        } finally {
+          setIsLoading?.(false);
         }
       };
 

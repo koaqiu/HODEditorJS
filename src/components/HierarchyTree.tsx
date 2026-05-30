@@ -17,6 +17,8 @@ interface HierarchyTreeProps {
   targetBoxes?: any[];
   setTargetBoxes?: (boxes: any[]) => void;
   onTabChange?: (tab: string) => void;
+  setIsLoading?: (loading: boolean) => void;
+  setStatusMsg?: (msg: string) => void;
 }
 
 const handleNumericWheel = (e: React.WheelEvent<HTMLInputElement>, onChange: (val: string) => void, step = 1) => {
@@ -108,6 +110,8 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   targetBoxes = [],
   setTargetBoxes,
   onTabChange,
+  setIsLoading,
+  setStatusMsg,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"hierarchy" | "materials" | "animations" | "targetboxes">("hierarchy");
@@ -1282,9 +1286,12 @@ const handleDeleteNode = (name: string, type: string) => {
   };
 
   const handleExportMaterials = async () => {
-    if (!model || !model.materials) return;
+    if (!model) return;
     try {
-      const jsonStr = JSON.stringify(model.materials, null, 2);
+      setIsLoading?.(true);
+      setStatusMsg?.("Exporting Materials...");
+      const matsToExport = model.materials || [];
+      const jsonStr = JSON.stringify(matsToExport, null, 2);
       const defaultName = `${model.name}_materials.json`;
       const savedPath = await invoke<string | null>("save_text_file", {
         defaultName,
@@ -1300,6 +1307,7 @@ const handleDeleteNode = (name: string, type: string) => {
         
         // Export separate TGA files in the same directory!
         if (model.textures && model.textures.length > 0) {
+          setStatusMsg?.("Exporting TGA textures...");
           await invoke("export_textures_tga", {
             folderPath,
             textures: model.textures
@@ -1310,6 +1318,8 @@ const handleDeleteNode = (name: string, type: string) => {
     } catch (e: any) {
       console.error(e);
       invoke("log_event", { level: "ERROR", message: `Failed to export materials and textures: ${e.toString()}` }).catch(console.error);
+    } finally {
+      setIsLoading?.(false);
     }
   };
 
@@ -1320,6 +1330,9 @@ const handleDeleteNode = (name: string, type: string) => {
         filters: ["json"]
       });
       if (jsonContent) {
+        setIsLoading?.(true);
+        setStatusMsg?.("Importing Materials...");
+        
         const parsedMaterials = JSON.parse(jsonContent);
         if (Array.isArray(parsedMaterials)) {
           onModelChange?.({
@@ -1328,13 +1341,15 @@ const handleDeleteNode = (name: string, type: string) => {
           });
           invoke("log_event", { level: "INFO", message: `Successfully imported ${parsedMaterials.length} materials from JSON file.` }).catch(console.error);
         } else {
-          throw new Error("Invalid format: Root of JSON file must be an array of materials.");
+          invoke("log_event", { level: "ERROR", message: "Imported JSON is not a valid materials array." }).catch(console.error);
+          alert("The selected file does not contain a valid materials array.");
         }
       }
     } catch (e: any) {
       console.error(e);
       invoke("log_event", { level: "ERROR", message: `Failed to import materials: ${e.toString()}` }).catch(console.error);
-      alert(`Import Failed: ${e.toString()}`);
+    } finally {
+      setIsLoading?.(false);
     }
   };
 

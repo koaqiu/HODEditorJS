@@ -193,6 +193,11 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 **Reason:** The animation dock was always visible, cluttering the UI when not needed.
 **Impact:** Cleaner UI — animation controls only appear when the animations tab is selected.
 
+### 2026-05-30: Loading Screens for IO Operations
+**Decision:** Integrated the global loading overlay (`isLoading`) across all major file I/O actions: Saving HOD files, Exporting/Importing OBJs, Exporting Materials, and Importing/Exporting TGA textures.
+**Reason:** Large models and bulk texture exports can cause the UI thread to hang momentarily. Users need visual feedback that the application is busy processing their request rather than frozen.
+**Impact:** Provides a much smoother UX. The application now displays a blur overlay with a spinner and a descriptive status message (e.g., "Exporting Materials...") during these operations.
+
 ### 2026-05-30: UV Mapping Viewport Rendering Fix
 **Decision:** Changed `tex.flipY = false` in `src/components/Viewport.tsx` for all textures mapped to `HODModel` materials.
 **Reason:** DAEnerys exports meshes and UVs formatted for Homeworld Remastered's native engine, which uses a DirectX-style top-down texture coordinate system where V=0 is the top edge. Three.js / WebGL defaults to a bottom-up coordinate system (`flipY = true`) where V=0 is the bottom edge. This mismatch caused textures on native DAEs and HODs to appear vertically flipped/shifted in the editor's viewport while compiling completely correctly for the game.
