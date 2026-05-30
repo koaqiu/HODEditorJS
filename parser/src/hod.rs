@@ -1773,13 +1773,16 @@ impl HODModel {
 
         let mut mesh_names = HashMap::new();
         for mesh in &mut self.meshes {
-            let count = mesh_names.entry(mesh.name.clone()).or_insert(0);
+            // Use (name, lod) as key — LOD variants with the same name
+            // are not duplicates, they're separate LODs of the same mesh.
+            let key = format!("{}_{}", mesh.name, mesh.lod);
+            let count = mesh_names.entry(key).or_insert(0);
             *count += 1;
             if *count > 1 {
                 let new_name = format!("{}_{}", mesh.name, count);
                 println!(
-                    "[RUST] WARNING: Duplicate mesh name '{}' found. Renamed to '{}'.",
-                    mesh.name, new_name
+                    "[RUST] WARNING: Duplicate mesh name '{}' lod {} found. Renamed to '{}'.",
+                    mesh.name, mesh.lod, new_name
                 );
                 mesh.name = new_name;
             }
