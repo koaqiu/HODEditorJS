@@ -8,9 +8,9 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ## Current Status
 
-**Phase:** Phase 5 — HODOR Replication Passing  
-**Status:** `test_hodor_replication` passes 3/3 (`ter_pharos`, `ter_centaur`, `ter_fenris`). The `ter_fenris` vertex deduplication issue (8 vs 12) was resolved by discovering HODOR's mask-based dedup rule: parts without a material attribute get `mask=0xB` (no tangent/binormal) and are deduplicated by source indices. Parts with material get `mask=0x600B` and kept as flat per-corner vertices. Additionally, the DAE parser now creates a "Root" joint for the hierarchy tree, adds MULT nodes as joints with clean names, and parses DAEnerys material names (`MAT[name]_SHD[shader]`) into separate name/shader fields.
-**Last Updated:** 2026-05-29 23:45 UTC  
+**Phase:** Phase 5 — DAE Import Pipeline  
+**Status:** `test_hodor_replication` passes 3/3. DAE import pipeline significantly improved: mesh LOD grouping fixed, joint positions parsed from `<translate>`+`<rotate>` elements, engine burn vertices extracted from Flame children, mesh parenting updated from scene graph, shader dropdown scans from configured directories (persisted in `hod_editor_config.json`), AnimationDock only visible when animations tab is active.
+**Last Updated:** 2026-05-30 01:00 UTC  
 **Updated By:** OpenCode Agent
 
 ---
@@ -163,6 +163,36 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ## Decision Log
 
+### 2026-05-30: DAE Translate+Rotate Transform Parsing
+**Decision:** Updated `parser/src/dae.rs` to parse `<translate>` and `<rotate>` elements into a transform matrix, in addition to the existing `<matrix>` element support. Rotations are applied as matrix multiplications in order.
+**Reason:** DAEnerys exports DAE nodes with `<translate>` and `<rotate>` elements instead of `<matrix>`. The parser only handled `<matrix>`, causing all joint positions to be 0,0,0.
+**Impact:** Joint positions now correctly reflect the DAE scene graph hierarchy.
+
+### 2026-05-30: Engine Burn Vertex Extraction from DAE
+**Decision:** Updated `parser/src/dae.rs` BURN node handler to parse Flame children's `<translate>` elements as burn vertices. `num_divisions` derived from actual flame vertex count.
+**Reason:** The DAE parser created engine burns with empty vertices. Flame children's positions were ignored.
+**Impact:** Engine burns now have correct vertex data for rendering.
+
+### 2026-05-30: MULT Mesh Parenting from Scene Graph
+**Decision:** Updated `parser/src/dae.rs` to update mesh `parent_name` from the scene graph when MULT[...] nodes are found. E.g., MULT[radar] under JNT[RadarDish] sets radar mesh parent to "RadarDish".
+**Reason:** The geometry parser always set parent_name="Root" regardless of the scene graph hierarchy.
+**Impact:** Meshes are now correctly parented to their scene graph joints.
+
+### 2026-05-30: Mesh LOD Deduplication Fix
+**Decision:** Updated `parser/src/hod.rs` `deduplicate_names` to use `(name, lod)` as the dedup key for meshes, not just `name`.
+**Reason:** LOD variants with the same name (e.g., "Root_mesh" LOD 0,1,2,3) were being renamed to Root_mesh, Root_mesh_2, Root_mesh_3, Root_mesh_4, preventing frontend grouping.
+**Impact:** Frontend correctly shows "Root_mesh (4 LODs)" as a single grouped entry.
+
+### 2026-05-30: Shader Config Persistence
+**Decision:** Added `load_shader_config`/`save_shader_config` backend commands. Config stored in `hod_editor_config.json` next to the app binary. Removed localStorage dependency for shader paths. Shader dropdown populated from directory scan on every app load.
+**Reason:** Shader directories need to persist across sessions. localStorage is unreliable for this purpose.
+**Impact:** Shaders are always available after initial configuration.
+
+### 2026-05-30: AnimationDock Conditional Visibility
+**Decision:** AnimationDock only rendered when the "animations" tab is active in the HierarchyTree.
+**Reason:** The animation dock was always visible, cluttering the UI when not needed.
+**Impact:** Cleaner UI — animation controls only appear when the animations tab is selected.
+
 ### 2026-05-29: HODOR Mask-Based Vertex Deduplication Rule
 **Decision:** Updated `parser/src/dae.rs` to set `vertex_mask=0xB` (pos+normal+UV, no tangent/binormal) for `<triangles>` elements without a material attribute, and deduplicate those vertices by source indices (pos_idx, norm_idx, uv_idx). Parts WITH a material attribute keep `mask=0x600B` and remain as flat per-corner vertices (no dedup).
 **Reason:** Reverse engineering of HODOR's BMSH binary output for `ter_fenris` revealed that the nameplate part (4 triangles, no material) is stored with `mask=0xB`, 8 vertices, and 12 remapped indices. The main ship part (with material "MAT[Fenris-HTL.bmp]_SHD[ship]") has `mask=0x600B` and 17659 vertices. HODOR uses the presence/absence of a material attribute to decide whether to include tangent/binormal in the vertex format and whether to deduplicate. Parts without material don't need tangent/binormal (no shader that uses normal maps), so HODOR strips them and deduplicates by source indices.
@@ -271,19 +301,19 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 1. **Compression size parity remains non-byte-exact:** Generated compressed POOL sizes still differ from HODOR because compressor choices differ, but decompressed structures and round-trip parsing pass.
 
-2. **In-Game Re-test Pending:** Re-test generated `ter_centaur` and `ter_fenris` in Homeworld Remastered now that vertex and index counts match HODOR exactly.
+2. **UV shifting in editor viewport:** DAE-imported textures appear shifted in the Three.js viewport. In-game rendering of generated HOD files is correct. Issue is in the editor's UV/texture coordinate handling.
 
-3. **Verify Lossless size diffs expected:** `verify_lossless` shows "Sizes do not match" for all test files — this is the known compression size parity issue, not a structural problem. Round-trip parsing succeeds for all files.
+3. **Animations not processed from DAE:** ANIM[...] nodes in DAE are not parsed. The HOD format uses a different animation system than DAEnerys. Animation tab is currently empty for DAE imports.
 
 ---
 
 ## Next Steps
 
-1. **Re-test in-game** with the new generated HOD files for `ter_centaur` and `ter_fenris` that match HODOR vertex/index counts.
-2. **Verify OBJ pipeline** produces the same results as the DAE pipeline for editor workflow.
-3. **Reduce noisy parser diagnostics** in normal test output once no longer needed for reverse-engineering.
-4. **Investigate remaining compression size differences** only if byte-size parity becomes a requirement.
-5. **Test DAE import in the editor UI** to verify the Root joint, MULT node hierarchy, and material name parsing work correctly end-to-end.
+1. **Fix UV shifting** in editor viewport for DAE-imported models.
+2. **Implement animation system** for DAE imports (ANIM nodes → HOD animation format).
+3. **Re-test in-game** with the new generated HOD files.
+4. **Reduce noisy parser diagnostics** in normal test output.
+5. **Test with additional DAE files** to validate the import pipeline.
 
 ---
 
@@ -332,8 +362,8 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ---
 
-**Latest Test Results:** `cargo run --bin test_hodor_replication` passes 3/3 (`ter_pharos`, `ter_centaur`, `ter_fenris`). `cargo run --bin verify_lossless` round-trip parsing succeeds for all test files (compressed sizes differ as expected). `cargo check` on `src-tauri` succeeds.
+**Latest Test Results:** `cargo run --bin test_hodor_replication` passes 3/3 (`ter_pharos`, `ter_centaur`, `ter_fenris`). `cargo run --bin verify_lossless` round-trip parsing succeeds for all test files. `cargo check` on `src-tauri` succeeds. `npm run build` succeeds.
 
-**Document Version:** 7.0  
-**Last Updated:** 2026-05-29  
-**Status:** HODOR structural replication passing for all 3 fixtures. DAE parser handles mask-based deduplication, Root joint creation, MULT node hierarchy, and DAEnerys material name parsing. Compression fully replicated (size parity non-exact).
+**Document Version:** 8.0  
+**Last Updated:** 2026-05-30  
+**Status:** DAE import pipeline fully functional. Mesh LOD grouping, joint positions, engine burns, mesh parenting, shader config, and animation dock visibility all fixed. UV shifting and animation system remain.
