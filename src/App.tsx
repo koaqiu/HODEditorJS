@@ -25,6 +25,7 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [loopPlayback, setLoopPlayback] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [activeHierarchyTab, setActiveHierarchyTab] = useState("hierarchy");
 
   // Workspace resizing widths
   const [sidebarWidth, setSidebarWidth] = useState(364);
@@ -892,6 +893,7 @@ function App() {
           setSelectedAnimIdx={setSelectedAnimIdx}
           targetBoxes={targetBoxes}
           setTargetBoxes={setTargetBoxes}
+          onTabChange={setActiveHierarchyTab}
         />
 
         {/* Sidebar Drag Separator Divider */}
@@ -1259,8 +1261,8 @@ function App() {
             </div>
           )}
 
-          {/* Animation Dock — always visible below the model area */}
-          {model && (
+          {/* Animation Dock — only visible when animations tab is active */}
+          {model && activeHierarchyTab === "animations" && (
             <AnimationDock
               model={model}
               selectedAnimIdx={selectedAnimIdx}

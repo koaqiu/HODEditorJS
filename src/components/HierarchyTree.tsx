@@ -16,6 +16,7 @@ interface HierarchyTreeProps {
   setSelectedAnimIdx: (idx: number) => void;
   targetBoxes?: any[];
   setTargetBoxes?: (boxes: any[]) => void;
+  onTabChange?: (tab: string) => void;
 }
 
 const handleNumericWheel = (e: React.WheelEvent<HTMLInputElement>, onChange: (val: string) => void, step = 1) => {
@@ -106,6 +107,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   setSelectedAnimIdx,
   targetBoxes = [],
   setTargetBoxes,
+  onTabChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"hierarchy" | "materials" | "animations" | "targetboxes">("hierarchy");
@@ -2084,7 +2086,7 @@ const handleDeleteNode = (name: string, type: string) => {
       {/* Tab Selector */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--border-color)", background: "rgba(10, 16, 27, 0.5)", flexShrink: 0 }}>
         <button
-          onClick={() => { setActiveTab("hierarchy"); setSearchTerm(""); }}
+          onClick={() => { setActiveTab("hierarchy"); setSearchTerm(""); onTabChange?.("hierarchy"); }}
           style={{
             flex: 1,
             background: activeTab === "hierarchy" ? "rgba(22, 160, 255, 0.12)" : "transparent",
@@ -2105,7 +2107,7 @@ const handleDeleteNode = (name: string, type: string) => {
           Hierarchy
         </button>
         <button
-          onClick={() => { setActiveTab("materials"); setSearchTerm(""); }}
+          onClick={() => { setActiveTab("materials"); setSearchTerm(""); onTabChange?.("materials"); }}
           style={{
             flex: 1,
             background: activeTab === "materials" ? "rgba(22, 160, 255, 0.12)" : "transparent",
@@ -2126,7 +2128,7 @@ const handleDeleteNode = (name: string, type: string) => {
           Materials
         </button>
         <button
-          onClick={() => { setActiveTab("animations"); setSearchTerm(""); }}
+          onClick={() => { setActiveTab("animations"); setSearchTerm(""); onTabChange?.("animations"); }}
           style={{
             flex: 1,
             background: activeTab === "animations" ? "rgba(22, 160, 255, 0.12)" : "transparent",
@@ -2147,7 +2149,7 @@ const handleDeleteNode = (name: string, type: string) => {
           Animations
         </button>
         <button
-          onClick={() => { setActiveTab("targetboxes"); setSearchTerm(""); }}
+          onClick={() => { setActiveTab("targetboxes"); setSearchTerm(""); onTabChange?.("targetboxes"); }}
           style={{
             flex: 1,
             background: activeTab === "targetboxes" ? "rgba(22, 160, 255, 0.12)" : "transparent",
