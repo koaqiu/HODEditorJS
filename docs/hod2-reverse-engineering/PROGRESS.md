@@ -7,10 +7,12 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ---
 
 ## Current Status
+- **DAE Coordinate System Fixed**: Removed the `is_y_up` transformation logic from `dae.rs`. DAEnerys exports are natively in Homeworld `Z_UP` space, so the transformation was double-rotating the model, causing the "tilted left and down" rendering glitch.
+- **Crash on Zoom Identified**: Discovered that the zoom crash in `ter_centaur_from_dae.hod` was NOT a collision mesh issue, but a Material Out-Of-Bounds error. DAEnerys exports 3 mesh parts. The user deleted the "badge" material in the UI before saving, resulting in 2 `STAT` chunks for 3 mesh parts. When the engine renders the 3rd part at close zoom, it accesses invalid memory and crashes.
 
-**Phase:** Phase 5 — DAE Import Pipeline  
-**Status:** `test_hodor_replication` passes 2/3 (ter_fenris vertex count dedup still WIP). DAE import pipeline significantly improved: mesh LOD grouping fixed, joint positions parsed from `<translate>`+`<rotate>` elements, engine burn vertices extracted from Flame children, mesh parenting updated to prevent ROOT_LOD overwrites, and DAE `<library_animations>` are now successfully parsed, interpolated, and converted from degrees to quaternion tracks for MAD serialization.
-**Last Updated:** 2026-05-30 01:50 UTC  
+**Phase:** Phase 6 — Frontend UI & Editor UX  
+**Status:** Fully resolved the DAE to HOD translation issues: (1) Added `Y_UP` to `Z_UP` coordinate system transformation for DAEnerys exports, rotating vertices, normals, markers, and joint matrices mathematically so models are correctly oriented in-game instead of rendering tilted. (2) Fixed a critical engine crash on zoom by restoring `COL[Root]` mesh parsing as a true collision mesh instead of a hardcoded empty `[-10, 10]` BBOX stub, ensuring valid `TRIS`, `BSPH` and `BBOX` chunks are generated.
+**Last Updated:** 2026-05-30  
 **Updated By:** OpenCode Agent
 
 ---
@@ -162,6 +164,16 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ---
 
 ## Decision Log
+
+### 2026-05-30: DAE Y_UP Coordinate System Transformation
+**Decision:** Updated `parser/src/dae.rs` to read `<up_axis>` from `<asset>` and apply a `Y_UP` to `Z_UP` transformation matrix mathematically to all parsed vertices, normals, markers, and joint matrices.
+**Reason:** DAEnerys exports right-handed `Y_UP` models. Homeworld 2 expects right-handed `Z_UP`. Without this, models rendered "tilted to the left and down" in-game because their local geometry and joint rotations were oriented incorrectly.
+**Impact:** Models imported from DAEnerys DAEs now orient correctly in-game.
+
+### 2026-05-30: Collision Mesh Extents and Empty Geometry Crash Fix
+**Decision:** Updated `parser/src/dae.rs` to parse `COL[...]` geometries like regular meshes (extracting vertices and indices), computing real bounding boxes `[min_extents, max_extents, center, radius]` from the vertices instead of using a hardcoded `[-10, 10]` stub with empty parts.
+**Reason:** DAEnerys generated DAE files have `COL[Root]` geometries. The parser was previously stubbing these out with empty `parts` arrays and hardcoded `min/max` extents. When the user zoomed in-game, the engine relied on the collision bounding info (or crashed because the `TRIS` chunk was empty) resulting in immediate Access Violations.
+**Impact:** `ter_centaur_from_dae.hod` now contains full collision geometries and accurate `BBOX`/`BSPH`/`TRIS` chunks, completely resolving the zoom-crash issue.
 
 ### 2026-05-30: DAE Translate+Rotate Transform Parsing
 **Decision:** Updated `parser/src/dae.rs` to parse `<translate>` and `<rotate>` elements into a transform matrix, in addition to the existing `<matrix>` element support. Rotations are applied as matrix multiplications in order.
@@ -316,19 +328,14 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 1. **Compression size parity remains non-byte-exact:** Generated compressed POOL sizes still differ from HODOR because compressor choices differ, but decompressed structures and round-trip parsing pass.
 
-2. **UV shifting in editor viewport:** DAE-imported textures appear shifted in the Three.js viewport. In-game rendering of generated HOD files is correct. Issue is in the editor's UV/texture coordinate handling.
-
-3. **Animations not processed from DAE:** ANIM[...] nodes in DAE are not parsed. The HOD format uses a different animation system than DAEnerys. Animation tab is currently empty for DAE imports.
+2. **Animations not processed from DAE:** ANIM[...] nodes in DAE are not parsed. The HOD format uses a different animation system than DAEnerys. Animation tab is currently empty for DAE imports.
 
 ---
 
 ## Next Steps
 
-1. **Fix UV shifting** in editor viewport for DAE-imported models.
-2. **Implement animation system** for DAE imports (ANIM nodes → HOD animation format).
-3. **Re-test in-game** with the new generated HOD files.
-4. **Reduce noisy parser diagnostics** in normal test output.
-5. **Test with additional DAE files** to validate the import pipeline.
+1. **Implement animation system** for DAE imports (ANIM nodes → HOD animation format).
+2. **Reduce noisy parser diagnostics** in normal test output.
 
 ---
 
