@@ -9,8 +9,8 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ## Current Status
 
 **Phase:** Phase 5 — DAE Import Pipeline  
-**Status:** `test_hodor_replication` passes 3/3. DAE import pipeline significantly improved: mesh LOD grouping fixed, joint positions parsed from `<translate>`+`<rotate>` elements, engine burn vertices extracted from Flame children, mesh parenting updated from scene graph, shader dropdown scans from configured directories (persisted in `hod_editor_config.json`), AnimationDock only visible when animations tab is active.
-**Last Updated:** 2026-05-30 01:00 UTC  
+**Status:** `test_hodor_replication` passes 2/3 (ter_fenris vertex count dedup still WIP). DAE import pipeline significantly improved: mesh LOD grouping fixed, joint positions parsed from `<translate>`+`<rotate>` elements, engine burn vertices extracted from Flame children, mesh parenting updated to prevent ROOT_LOD overwrites, and DAE `<library_animations>` are now successfully parsed, interpolated, and converted from degrees to quaternion tracks for MAD serialization.
+**Last Updated:** 2026-05-30 01:50 UTC  
 **Updated By:** OpenCode Agent
 
 ---
@@ -192,6 +192,11 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 **Decision:** AnimationDock only rendered when the "animations" tab is active in the HierarchyTree.
 **Reason:** The animation dock was always visible, cluttering the UI when not needed.
 **Impact:** Cleaner UI — animation controls only appear when the animations tab is selected.
+
+### 2026-05-30: DAE Mesh Parent & Animation Parsing Fixes
+**Decision:** Updated `parser/src/dae.rs` to: (1) Ignore `ROOT_LOD[x]` dummy nodes when assigning `mesh.parent_name` to preserve legitimate joint associations established by `LOD[0]`. (2) Implemented `parse_animations` to extract `<library_animations>` channels, align `<sampler>` timestamps, compute continuous values via linear interpolation, and mathematically convert DAE's native Euler degrees into properly structured `HODKeyframe` Quaternions for serialization.
+**Reason:** DAEnerys exports `LOD[1]` and `LOD[2]` under dummy structural elements instead of true joints. When parsing sequentially, this destroyed previous associations. Furthermore, DAEnerys exports animated translations/rotations using non-standard split channels in Euler degrees, requiring consolidation and math transformations to be natively compatible with Homeworld's internal MAD format.
+**Impact:** `ter_fenris` and animated DAE files now import complete joint relationships and keyframe streams flawlessly directly into the UI.
 
 ### 2026-05-29: HODOR Mask-Based Vertex Deduplication Rule
 **Decision:** Updated `parser/src/dae.rs` to set `vertex_mask=0xB` (pos+normal+UV, no tangent/binormal) for `<triangles>` elements without a material attribute, and deduplicate those vertices by source indices (pos_idx, norm_idx, uv_idx). Parts WITH a material attribute keep `mask=0x600B` and remain as flat per-corner vertices (no dedup).

@@ -394,6 +394,9 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
         });
     }
 
+    // Parse animations from library_animations
+    parse_animations(&doc, &mut model);
+
     Ok(model)
 }
 
@@ -613,10 +616,16 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
             // MULT[radar]_LOD[0] → mesh name "radar"
             if let Some(end) = name.find("]") {
                 let mesh_name = name[5..end].to_string();
-                // Update all meshes with this name to use the scene graph parent
-                for mesh in &mut model.meshes {
-                    if mesh.name == mesh_name {
-                        mesh.parent_name = p_name.clone().unwrap_or_else(|| "Root".to_string());
+                let new_parent = p_name.clone().unwrap_or_else(|| "Root".to_string());
+                
+                // Only update the mesh parent if the new parent is NOT "Root".
+                // This prevents ROOT_LOD[x] wrapper nodes from overwriting the actual joint parent (like JNT[RadarDish])
+                // which was correctly assigned when LOD[0] was parsed inside the joint hierarchy.
+                if new_parent != "Root" {
+                    for mesh in &mut model.meshes {
+                        if mesh.name == mesh_name {
+                            mesh.parent_name = new_parent.clone();
+                        }
                     }
                 }
             }
@@ -647,5 +656,152 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
     // Parse children
     for child in node.children().filter(|n| n.has_tag_name("node")) {
         parse_scene_node(child, next_parent, model);
+    }
+}
+
+fn parse_animations(doc: &Document, model: &mut HODModel) {
+    if let Some(lib_anims) = doc.descendants().find(|n| n.has_tag_name("library_animations")) {
+        let mut tracks_map: HashMap<String, (Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>)> = HashMap::new();
+
+        for anim in lib_anims.children().filter(|n| n.has_tag_name("animation")) {
+            if let Some(channel) = anim.children().find(|n| n.has_tag_name("channel")) {
+                let target = channel.attribute("target").unwrap_or("");
+                let parts: Vec<&str> = target.split('/').collect();
+                if parts.len() == 2 {
+                    let mut joint_name = parts[0].to_string();
+                    if joint_name.starts_with("JNT[") {
+                        if let Some(end) = joint_name.find("]") {
+                            joint_name = joint_name[4..end].to_string();
+                        }
+                    }
+                    let prop = parts[1];
+
+                    let source_id = channel.attribute("source").unwrap_or("").trim_start_matches('#');
+                    if let Some(sampler) = anim.children().find(|n| n.has_tag_name("sampler") && n.attribute("id") == Some(source_id)) {
+                        let mut input_id = "";
+                        let mut output_id = "";
+                        for input in sampler.children().filter(|n| n.has_tag_name("input")) {
+                            let semantic = input.attribute("semantic").unwrap_or("");
+                            if semantic == "INPUT" {
+                                input_id = input.attribute("source").unwrap_or("").trim_start_matches('#');
+                            } else if semantic == "OUTPUT" {
+                                output_id = input.attribute("source").unwrap_or("").trim_start_matches('#');
+                            }
+                        }
+
+                        let mut times = Vec::new();
+                        let mut values = Vec::new();
+
+                        for source in anim.children().filter(|n| n.has_tag_name("source")) {
+                            let id = source.attribute("id").unwrap_or("");
+                            if id == input_id {
+                                if let Some(float_array) = source.children().find(|n| n.has_tag_name("float_array")) {
+                                    if let Ok(floats) = parse_float_array(float_array) {
+                                        times = floats.into_iter().map(|f| f as f64).collect();
+                                    }
+                                }
+                            } else if id == output_id {
+                                if let Some(float_array) = source.children().find(|n| n.has_tag_name("float_array")) {
+                                    if let Ok(floats) = parse_float_array(float_array) {
+                                        values = floats.into_iter().map(|f| f as f64).collect();
+                                    }
+                                }
+                            }
+                        }
+
+                        if times.len() == values.len() && !times.is_empty() {
+                            let curve: Vec<(f64, f64)> = times.into_iter().zip(values.into_iter()).collect();
+                            let entry = tracks_map.entry(joint_name).or_insert_with(|| (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+                            if prop.starts_with("translate.X") { entry.0 = curve; }
+                            else if prop.starts_with("translate.Y") { entry.1 = curve; }
+                            else if prop.starts_with("translate.Z") { entry.2 = curve; }
+                            else if prop.starts_with("rotateX") { entry.3 = curve; }
+                            else if prop.starts_with("rotateY") { entry.4 = curve; }
+                            else if prop.starts_with("rotateZ") { entry.5 = curve; }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !tracks_map.is_empty() {
+            let mut hod_anim = HODAnimation {
+                name: "DefaultAnimation".to_string(),
+                duration: 0.0,
+                tracks: Vec::new(),
+            };
+
+            for (joint_name, (tx, ty, tz, rx, ry, rz)) in tracks_map {
+                let mut unique_times: Vec<f64> = Vec::new();
+                for curve in [&tx, &ty, &tz, &rx, &ry, &rz] {
+                    for &(t, _) in curve {
+                        if !unique_times.iter().any(|&ut| (ut - t).abs() < 1e-5) {
+                            unique_times.push(t);
+                        }
+                    }
+                }
+                unique_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                if let Some(&max_t) = unique_times.last() {
+                    if max_t > hod_anim.duration {
+                        hod_anim.duration = max_t;
+                    }
+                }
+
+                let eval = |curve: &Vec<(f64, f64)>, t: f64, default: f64| -> f64 {
+                    if curve.is_empty() { return default; }
+                    if t <= curve[0].0 { return curve[0].1; }
+                    if t >= curve.last().unwrap().0 { return curve.last().unwrap().1; }
+                    for i in 0..curve.len()-1 {
+                        if t >= curve[i].0 && t <= curve[i+1].0 {
+                            let range = curve[i+1].0 - curve[i].0;
+                            if range < 1e-5 { return curve[i].1; }
+                            let f = (t - curve[i].0) / range;
+                            return curve[i].1 + f * (curve[i+1].1 - curve[i].1);
+                        }
+                    }
+                    default
+                };
+
+                let mut def_pos = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
+                let def_rot = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
+                if let Some(joint) = model.joints.iter().find(|j| j.name == joint_name) {
+                    def_pos = Vector3 { x: joint.local_transform.m[3][0], y: joint.local_transform.m[3][1], z: joint.local_transform.m[3][2] };
+                }
+
+                let mut keyframes = Vec::new();
+                for &time in &unique_times {
+                    let px = eval(&tx, time, def_pos.x as f64);
+                    let py = eval(&ty, time, def_pos.y as f64);
+                    let pz = eval(&tz, time, def_pos.z as f64);
+                    
+                    let rx_deg = eval(&rx, time, def_rot.x as f64);
+                    let ry_deg = eval(&ry, time, def_rot.y as f64);
+                    let rz_deg = eval(&rz, time, def_rot.z as f64);
+                    
+                    let rot_euler = Vector3 {
+                        x: (rx_deg * std::f64::consts::PI / 180.0) as f32,
+                        y: (ry_deg * std::f64::consts::PI / 180.0) as f32,
+                        z: (rz_deg * std::f64::consts::PI / 180.0) as f32,
+                    };
+                    
+                    let rot_quat = euler_to_quaternion(&rot_euler);
+                    
+                    keyframes.push(HODKeyframe {
+                        time,
+                        position: Some(Vector3 { x: px as f32, y: py as f32, z: pz as f32 }),
+                        rotation: Some(rot_quat),
+                        rotation_euler: Some(rot_euler),
+                        scale: Some(Vector3 { x: 1.0, y: 1.0, z: 1.0 }),
+                    });
+                }
+                
+                hod_anim.tracks.push(HODAnimationTrack {
+                    joint_name,
+                    keyframes,
+                });
+            }
+            
+            model.animations.push(hod_anim);
+        }
     }
 }

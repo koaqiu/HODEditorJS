@@ -6592,7 +6592,7 @@ fn quaternion_to_euler(q: &HODQuaternion) -> Vector3 {
     rot
 }
 
-fn euler_to_quaternion(rot: &Vector3) -> HODQuaternion {
+pub fn euler_to_quaternion(rot: &Vector3) -> HODQuaternion {
     let cx = rot.x.cos();
     let sx = rot.x.sin();
     let cy = rot.y.cos();
