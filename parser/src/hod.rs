@@ -1107,8 +1107,7 @@ impl HODModel {
                                                     }
                                                 }
                                                 _ => {
-                                                    // Capture unparsed root chunks (like INFO) for preservation
-                                                    preserved_chunks.push(chunk.clone());
+                                                    preserved_chunks.push(child.clone());
                                                 }
                                             }
                                         }
@@ -1636,7 +1635,12 @@ impl HODModel {
             // Apply updates
             for (idx, new_parent, new_transform) in updates {
                 self.joints[idx].parent_name = new_parent;
-                self.joints[idx].local_transform = new_transform;
+                self.joints[idx].local_transform = new_transform.clone();
+                // Update stored position/rotation/scale to match the cleaned transform
+                let (pos, rot, scale) = decompose_matrix(new_transform);
+                self.joints[idx].position = Some(pos);
+                self.joints[idx].rotation = Some(rot);
+                self.joints[idx].scale = Some(scale);
             }
 
             // --- FUNCTIONAL NODES CLEANUP ---
@@ -2517,20 +2521,12 @@ fn encode_b64_png_thumbnail(rgba: &[u8], width: u32, height: u32, max_dim: u32) 
                 target_h,
                 image::imageops::FilterType::Nearest,
             );
-            let flipped = image::imageops::flip_vertical(&resized);
-            flipped.into_raw()
+            resized.into_raw()
         } else {
             rgba.to_vec()
         }
     } else {
-        if let Some(img) =
-            image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba.to_vec())
-        {
-            let flipped = image::imageops::flip_vertical(&img);
-            flipped.into_raw()
-        } else {
-            rgba.to_vec()
-        }
+        rgba.to_vec()
     };
 
     let mut png_bytes = Vec::new();
@@ -2598,21 +2594,33 @@ fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HODTe
         let mut expected_size = 0;
         let mut cur_w = width as usize;
         let mut cur_h = height as usize;
-        for _ in 0..mip_count {
-            if format == "DXT1" {
-                expected_size += std::cmp::max(8, (cur_w * cur_h) / 2);
+        let pool_pos_before = context.texture_pool.position();
+        println!("[TEX-DEBUG] Parsing texture '{}' ({}x{}, {} mips, format={}) at pool position {}", 
+                name, width, height, mip_count, format, pool_pos_before);
+        
+        for mip_idx in 0..mip_count {
+            let mip_size = if format == "DXT1" {
+                std::cmp::max(8, (cur_w * cur_h) / 2)
             } else if format == "DXT5" {
-                expected_size += std::cmp::max(16, cur_w * cur_h);
+                std::cmp::max(16, cur_w * cur_h)
             } else {
-                expected_size += cur_w * cur_h * 4;
-            }
+                cur_w * cur_h * 4
+            };
+            expected_size += mip_size;
+            println!("[TEX-DEBUG]   Mip {}: {}x{} = {} bytes (cumulative: {})", 
+                    mip_idx, cur_w, cur_h, mip_size, expected_size);
             if cur_w == 1 && cur_h == 1 { break; }
             cur_w = std::cmp::max(1, cur_w / 2);
             cur_h = std::cmp::max(1, cur_h / 2);
         }
+        
         let mut buf = vec![0u8; expected_size.min(1024 * 1024 * 8)]; // clamp to safe limits
         if let Ok(_) = context.texture_pool.read_exact(&mut buf) {
+            let pool_pos_after = context.texture_pool.position();
+            println!("[TEX-DEBUG] Read {} bytes, pool position now: {}", expected_size, pool_pos_after);
             raw_pixels = buf;
+        } else {
+            println!("[TEX-DEBUG] FAILED to read {} bytes from texture pool!", expected_size);
         }
     } else {
         // Read raw inline mips from child chunks if present, else read inline
@@ -4044,9 +4052,9 @@ fn parse_joints(chunk: &IffChunk) -> Result<Vec<HODJoint>, String> {
                     z: rz,
                 },
                 Vector3 {
-                    x: sx,
-                    y: sy,
-                    z: sz,
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
                 },
             );
 
@@ -4937,12 +4945,25 @@ fn generate_lmip_texture_chunks_and_pool(
     let mut texture_pool = Vec::new();
 
     for texture in textures {
-        let Some((mut rgba, width, height)) = decode_texture_png_rgba(texture)? else {
-            continue;
+        let (mut rgba, width, height) = match decode_texture_png_rgba(texture) {
+            Ok(Some((rgba, w, h))) if w > 0 && h > 0 => (rgba, w, h),
+            _ => {
+                println!("[TEX-DEBUG-SAVE] WARNING: Texture '{}' failed to decode or was empty. Injecting 4x4 magenta fallback to prevent material index desync.", texture.name);
+                let w = 4;
+                let h = 4;
+                let mut fallback = vec![0u8; w * h * 4];
+                for i in 0..(w * h) {
+                    fallback[i * 4] = 255;     // R
+                    fallback[i * 4 + 1] = 0;   // G
+                    fallback[i * 4 + 2] = 255; // B
+                    fallback[i * 4 + 3] = 255; // A
+                }
+                (fallback, w as u32, h as u32)
+            }
         };
-        if width == 0 || height == 0 {
-            continue;
-        }
+        println!("[TEX-DEBUG-SAVE] Writing texture '{}' ({}x{}, format={})", 
+                texture.name, width, height, texture.format);
+        
         // HOD 2.0 POOL chunks store textures bottom-up (DirectX convention).
         // Our internal format (from TGA/PNG or extracted) is always top-down.
         // So we ALWAYS flip it before compression.
@@ -4959,6 +4980,8 @@ fn generate_lmip_texture_chunks_and_pool(
         if mip_count == 0 {
             mip_count = 1;
         }
+        println!("[TEX-DEBUG-SAVE] Generated {} mip levels", mip_count);
+        
         let mips = generate_mip_chain(&rgba, width as usize, height as usize, mip_count as usize);
 
         let output_format = match texture.format.as_str() {
@@ -5289,34 +5312,6 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
         pool_buf.write_u32::<LittleEndian>(0).unwrap(); // decomp_mesh_len = 0
         pool_buf.write_u32::<LittleEndian>(0).unwrap(); // comp_face_len = 0
         pool_buf.write_u32::<LittleEndian>(0).unwrap(); // decomp_face_len = 0
-        pool_buf
-    } else if original_mesh_pool_preserved && !original_comp_mesh_buf.is_empty() {
-        // Preserve original mesh/face pool data when meshes haven't been modified
-        let mut pool_buf = Vec::new();
-        pool_buf
-            .write_u32::<LittleEndian>(extracted_pool_type)
-            .unwrap();
-        pool_buf
-            .write_u32::<LittleEndian>(comp_tex_buf.len() as u32)
-            .unwrap();
-        pool_buf
-            .write_u32::<LittleEndian>(decomp_tex_len_val)
-            .unwrap();
-        pool_buf.extend_from_slice(&comp_tex_buf);
-        pool_buf
-            .write_u32::<LittleEndian>(original_comp_mesh_buf.len() as u32)
-            .unwrap();
-        pool_buf
-            .write_u32::<LittleEndian>(original_decomp_mesh_len_val)
-            .unwrap();
-        pool_buf.extend_from_slice(&original_comp_mesh_buf);
-        pool_buf
-            .write_u32::<LittleEndian>(original_comp_face_buf.len() as u32)
-            .unwrap();
-        pool_buf
-            .write_u32::<LittleEndian>(original_decomp_face_len_val)
-            .unwrap();
-        pool_buf.extend_from_slice(&original_comp_face_buf);
         pool_buf
     } else {
         crate::compiler::generate_pool_data(
@@ -5698,9 +5693,9 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
         });
     }
 
-    // Add preserved DTRM children (KDOP, COLD, SCAR, etc. — skip regenerated chunks)
     let dtrm_sub_chunk_ids = ["HIER", "MRKR", "BURN", "NAVL", "MRKS"];
     let mut has_cold = false;
+    let mut has_kdop = false;
     for chunk in &model.preserved_chunks {
         if chunk.id == "DTRM" {
             for child in &chunk.children {
@@ -5708,13 +5703,18 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                     if child.id == "COLD" {
                         has_cold = true;
                     }
+                    if child.id == "KDOP" {
+                        has_kdop = true;
+                    }
                     dtrm_children.push(child.clone());
                 }
             }
         } else if ["KDOP", "COLD", "SCAR", "BNDV", "ETSH"].contains(&chunk.id.as_str()) {
-            // These are DTRM sub-chunks stored at preserved_chunks level
             if chunk.id == "COLD" {
                 has_cold = true;
+            }
+            if chunk.id == "KDOP" {
+                has_kdop = true;
             }
             dtrm_children.push(chunk.clone());
         }
@@ -5783,9 +5783,18 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                 });
             }
 
-            // Write collision mesh name
             let mut cold_data = Vec::new();
             write_len_string(&mut cold_data, &cm.name).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.min_extents.x).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.min_extents.y).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.min_extents.z).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.max_extents.x).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.max_extents.y).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.max_extents.z).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.center.x).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.center.y).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.center.z).map_err(|e| e.to_string())?;
+            cold_data.write_f32::<LittleEndian>(cm.radius).map_err(|e| e.to_string())?;
 
             dtrm_children.push(IffChunk {
                 id: "COLD".to_string(),
@@ -5794,6 +5803,26 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                 data: cold_data,
                 children: cold_children,
             });
+        }
+    }
+
+    if !has_kdop && !model.collision_meshes.is_empty() {
+        for cm in &model.collision_meshes {
+            if let Some(part) = cm.mesh.parts.first() {
+                let verts: Vec<[f32; 3]> = part
+                    .vertices
+                    .iter()
+                    .map(|v| [v.position.x, v.position.y, v.position.z])
+                    .collect();
+                let kdop_data = crate::kdop::generate_kdop(&verts, &part.indices);
+                dtrm_children.push(IffChunk {
+                    id: "KDOP".to_string(),
+                    chunk_type: ChunkType::Default,
+                    version: 0,
+                    data: kdop_data,
+                    children: Vec::new(),
+                });
+            }
         }
     }
 
