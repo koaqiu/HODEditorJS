@@ -327,6 +327,18 @@ function App() {
         sanitizedModel.meshes.forEach((m) => {
           initialVisibility[`${m.name}_lod_${m.lod}`] = m.lod === 0;
         });
+        const glowGroups = new Map<string, typeof sanitizedModel.engine_glows>();
+        sanitizedModel.engine_glows.forEach((g) => {
+          const baseName = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+          if (!glowGroups.has(baseName)) glowGroups.set(baseName, []);
+          glowGroups.get(baseName)!.push(g);
+        });
+        glowGroups.forEach((glows) => {
+          const sortedGlows = [...glows].sort((a, b) => a.lod - b.lod);
+          sortedGlows.forEach((g, idx) => {
+            initialVisibility[`engine_glow:${g.name}`] = idx === 0;
+          });
+        });
         setVisibleMeshes(initialVisibility);
 
         setStatusMsg(`HOD ${sanitizedModel.name} loaded successfully | Meshes: ${sanitizedModel.meshes.length} | Joints: ${sanitizedModel.joints.length} | Markers: ${sanitizedModel.markers.length}`);
@@ -387,6 +399,42 @@ function App() {
       setIsDirty(false);
       setStatusMsg("New HOD model successfully initialized!");
     }, 50);
+  };
+
+  const handleToggleVisibility = (meshKey: string) => {
+    setVisibleMeshes((prev) => {
+      const nextVisibility = prev[meshKey] === false;
+      const updated = { ...prev, [meshKey]: nextVisibility };
+
+      const mesh = model?.meshes.find((m) => `${m.name}_lod_${m.lod}` === meshKey);
+      if (mesh && nextVisibility) {
+        const baseName = mesh.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+        model?.meshes.forEach((m) => {
+          const mBase = m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+          const lodKey = `${m.name}_lod_${m.lod}`;
+          if (mBase === baseName && lodKey !== meshKey) {
+            updated[lodKey] = false;
+          }
+        });
+      }
+
+      if (meshKey.startsWith("engine_glow:")) {
+        const glowName = meshKey.substring("engine_glow:".length);
+        const glow = model?.engine_glows.find((g) => g.name === glowName);
+        if (glow && nextVisibility) {
+          const baseName = glow.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+          model?.engine_glows.forEach((g) => {
+            const gBase = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+            const lodKey = `engine_glow:${g.name}`;
+            if (gBase === baseName && lodKey !== meshKey) {
+              updated[lodKey] = false;
+            }
+          });
+        }
+      }
+
+      return updated;
+    });
   };
 
   const handleExecuteMigration = () => {
@@ -1309,7 +1357,7 @@ function App() {
           onSelectedNodeChange={setSelectedNode}
           selectedAnimIdx={selectedAnimIdx}
           visibleMeshes={visibleMeshes}
-          onToggleVisibility={(meshKey) => setVisibleMeshes(prev => ({ ...prev, [meshKey]: prev[meshKey] === false ? true : false }))}
+          onToggleVisibility={handleToggleVisibility}
           onConfigureShaders={selectAndSaveKeeperPath}
           setIsLoading={setIsLoading}
           setStatusMsg={setStatusMsg}

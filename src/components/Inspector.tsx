@@ -218,11 +218,13 @@ interface GlowLODInspectorProps {
   model: HODModel;
   baseName: string;
   onModelChange?: (updatedModel: HODModel) => void;
+  visibleMeshes?: Record<string, boolean>;
+  onToggleVisibility?: (meshKey: string) => void;
   setIsLoading?: React.Dispatch<React.SetStateAction<boolean>>;
   setStatusMsg?: React.Dispatch<React.SetStateAction<string>>;
 }
 
-const GlowLODInspector: React.FC<GlowLODInspectorProps> = ({ model, baseName, onModelChange, setIsLoading, setStatusMsg }) => {
+const GlowLODInspector: React.FC<GlowLODInspectorProps> = ({ model, baseName, onModelChange, visibleMeshes, onToggleVisibility, setIsLoading, setStatusMsg }) => {
   const [selectedLodIdx, setSelectedLodIdx] = useState(0);
   const glowLods = (model.engine_glows || []).filter(g => {
     const gBase = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
@@ -391,6 +393,8 @@ const GlowLODInspector: React.FC<GlowLODInspectorProps> = ({ model, baseName, on
         <div style={{ display: "flex", flexDirection: "column", gap: "4px", background: "rgba(0,0,0,0.15)", padding: "8px", borderRadius: "4px" }}>
           {glowLods.map((lm, idx) => {
             const isSelected = selectedLodIdx === idx;
+            const lodKey = `engine_glow:${lm.name}`;
+            const isLodVisible = visibleMeshes?.[lodKey] !== false;
             return (
               <div key={`${lm.name}_${lm.lod}`} onClick={() => setSelectedLodIdx(idx)}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", borderRadius: "3px", cursor: "pointer", background: isSelected ? "rgba(22, 160, 255, 0.15)" : "transparent", border: isSelected ? "1px solid rgba(22, 160, 255, 0.3)" : "1px solid transparent" }}>
@@ -398,6 +402,13 @@ const GlowLODInspector: React.FC<GlowLODInspectorProps> = ({ model, baseName, on
                   LOD {lm.lod} <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>({lm.mesh.parts.reduce((s, p) => s + p.vertices.length, 0)} verts)</span>
                 </span>
                 <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                  {onToggleVisibility && (
+                    <span onClick={(e) => { e.stopPropagation(); onToggleVisibility(lodKey); }}
+                      style={{ padding: "2px 4px", cursor: "pointer", color: isLodVisible ? "var(--accent-cyan)" : "var(--text-muted)", display: "inline-flex", alignItems: "center" }}
+                      title={isLodVisible ? "Hide LOD" : "Show LOD"}>
+                      {isLodVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                    </span>
+                  )}
                   <button onClick={(e) => { e.stopPropagation(); handleMoveLod(idx, -1); }} disabled={idx === 0} style={{ padding: "2px 4px", fontSize: "10px" }}>▲</button>
                   <button onClick={(e) => { e.stopPropagation(); handleMoveLod(idx, 1); }} disabled={idx === glowLods.length - 1} style={{ padding: "2px 4px", fontSize: "10px" }}>▼</button>
                   <button onClick={(e) => { e.stopPropagation(); handleDeleteLod(idx); }} disabled={glowLods.length <= 1} style={{ padding: "2px 4px", fontSize: "10px", color: "#f44" }}>✕</button>
@@ -1245,7 +1256,6 @@ export const Inspector: React.FC<InspectorProps> = ({
       const hasBurn = model.engine_burns?.some(b => b.parent_name === joint.name);
       const hasGlow = model.engine_glows?.some(g => g.parent_name === joint.name);
       const hasShape = model.engine_shapes?.some(s => s.parent_name === joint.name);
-      const hasCollision = model.collision_meshes?.some(c => c.name === joint.name);
 
       const handleAddSubnode = (type: string) => {
         if (type === "burn") {
@@ -1257,9 +1267,6 @@ export const Inspector: React.FC<InspectorProps> = ({
         } else if (type === "shape") {
           const newShape = { name: `shape_${joint.name}`, parent_name: joint.name, mesh: { name: `shape_${joint.name}`, parent_name: joint.name, lod: 0, parts: [] } };
           onModelChange?.({ ...model, engine_shapes: [...(model.engine_shapes || []), newShape] });
-        } else if (type === "collision") {
-          const newCol = { name: joint.name, min_extents: {x:0,y:0,z:0}, max_extents: {x:0,y:0,z:0}, center: {x:0,y:0,z:0}, radius: 0, mesh: { name: joint.name, parent_name: joint.name, lod: 0, parts: [] } };
-          onModelChange?.({ ...model, collision_meshes: [...(model.collision_meshes || []), newCol] });
         }
       };
       const handleRemoveSubnode = (type: string) => {
@@ -1269,8 +1276,6 @@ export const Inspector: React.FC<InspectorProps> = ({
           onModelChange?.({ ...model, engine_glows: (model.engine_glows || []).filter(g => g.parent_name !== joint.name) });
         } else if (type === "shape") {
           onModelChange?.({ ...model, engine_shapes: (model.engine_shapes || []).filter(s => s.parent_name !== joint.name) });
-        } else if (type === "collision") {
-          onModelChange?.({ ...model, collision_meshes: (model.collision_meshes || []).filter(c => c.name !== joint.name) });
         }
       };
 
@@ -1326,14 +1331,6 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "4px", border: "1px solid var(--border-color)" }}>
-            <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "4px" }}>Collision Hull</div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {!hasCollision ? 
-                <button onClick={() => handleAddSubnode("collision")} style={{ fontSize: "11px", padding: "4px 8px" }}>+ Add Collision Mesh</button> :
-                <button onClick={() => handleRemoveSubnode("collision")} style={{ fontSize: "11px", padding: "4px 8px", background: "rgba(255, 50, 50, 0.2)", borderColor: "rgba(255, 50, 50, 0.5)" }}>- Remove Collision</button>}
-            </div>
-          </div>
           <hr style={{ border: "none", borderTop: "1px solid var(--border-color)", margin: 0 }} />
 
           <div>
@@ -2211,7 +2208,7 @@ export const Inspector: React.FC<InspectorProps> = ({
     }
 
     if (selectedNode.type === "engine_glow") {
-      return <GlowLODInspector model={model} baseName={selectedNode.name} onModelChange={onModelChange} setIsLoading={setIsLoading} setStatusMsg={setStatusMsg} />;
+      return <GlowLODInspector model={model} baseName={selectedNode.name} onModelChange={onModelChange} visibleMeshes={visibleMeshes} onToggleVisibility={onToggleVisibility} setIsLoading={setIsLoading} setStatusMsg={setStatusMsg} />;
     }
 
     if (selectedNode.type === "engine_shape") {

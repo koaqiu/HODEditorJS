@@ -638,6 +638,7 @@ fn import_tga_textures() -> Result<Vec<HODTexture>, String> {
                     png_preview: Some(format!("data:image/png;base64,{}", b64_preview)),
                     png_data: Some(b64_preview),
                     source_path: Some(src_path.to_string_lossy().to_string()),
+                    legacy_storage_y_flipped: false,
                 });
             }
             Ok(textures)

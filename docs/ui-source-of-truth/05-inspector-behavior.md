@@ -46,6 +46,8 @@ Collision inspector supports editing center/radius/extents and selecting or calc
 
 Collision mesh parent access may be optional in imported/malformed data; UI code should preserve null-safe handling.
 
+Collision creation/removal controls belong to the COL/collision flow, not engine glow, engine nozzle, engine shape, or generic joint inspectors.
+
 ## Mesh Editing And OBJ Flow
 
 Mesh inspector supports editing mesh name, LOD, parent, and materials according to current code. OBJ import/export controls are exposed from Inspector and route through app/Tauri callbacks.
@@ -53,6 +55,8 @@ Mesh inspector supports editing mesh name, LOD, parent, and materials according 
 ## Engine Nodes
 
 Inspector contains editors for engine burn/glow/shape data. Agents must verify exact fields in `Inspector.tsx` before adding or documenting new engine-specific controls.
+
+Engine Glow LOD rows may expose per-LOD visibility toggles that write through the shared `visibleMeshes` state using `engine_glow:<glow name>` keys, matching Viewport rendering. Mesh and Engine Glow LOD visibility is mutually exclusive per base node: enabling one LOD hides sibling LODs for the same node.
 
 ## Materials And Textures
 

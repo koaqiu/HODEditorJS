@@ -231,6 +231,7 @@ pub fn discover_and_pack_textures(model: &mut HODModel, base_dir: &Path) {
                     png_preview: Some(format!("data:image/png;base64,{}", b64)),
                     png_data: Some(b64),
                     source_path: None,
+                    legacy_storage_y_flipped: false,
                 });
             }
         };
@@ -262,4 +263,3 @@ pub fn discover_and_pack_textures(model: &mut HODModel, base_dir: &Path) {
 
     model.textures.extend(new_textures);
 }
-

@@ -1130,8 +1130,21 @@ const handleDeleteNode = (name: string, type: string) => {
       updatedModel.markers = model.markers.filter(mrk => mrk.name !== name);
       invoke("log_event", { level: "INFO", message: `Deleted marker: ${name}` }).catch(console.error);
     } else if (type === "mesh") {
-      updatedModel.meshes = model.meshes.filter(m => `${m.name}_lod_${m.lod}` !== name);
-      invoke("log_event", { level: "INFO", message: `Deleted mesh LOD part: ${name}` }).catch(console.error);
+      const getMeshBaseName = (meshName: string) => meshName.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+      const deletedMeshes = model.meshes.filter((m) => {
+        const lodKey = `${m.name}_lod_${m.lod}`;
+        return getMeshBaseName(m.name) === name || m.name === name || lodKey === name;
+      });
+      updatedModel.meshes = model.meshes.filter((m) => !deletedMeshes.includes(m));
+      setVisibleMeshes((prev) => {
+        const updated = { ...prev };
+        delete updated[name];
+        deletedMeshes.forEach((m) => {
+          delete updated[`${m.name}_lod_${m.lod}`];
+        });
+        return updated;
+      });
+      invoke("log_event", { level: "INFO", message: `Deleted mesh node: ${name} (${deletedMeshes.length} LOD${deletedMeshes.length === 1 ? "" : "s"} removed).` }).catch(console.error);
     } else if (type === "navlight") {
       updatedModel.nav_lights = model.nav_lights.filter(nav => nav.name !== name);
       updatedModel.joints = model.joints.filter(j => j.name !== name);
@@ -1244,7 +1257,26 @@ const handleDeleteNode = (name: string, type: string) => {
 
   const toggleNodeVisibility = (nodeKey: string) => {
     setVisibleMeshes((prev) => {
-      const isCurrentlyVisible = prev[nodeKey] !== false;
+      let isCurrentlyVisible = prev[nodeKey] !== false;
+      if (!nodeKey.includes(":") && model?.meshes) {
+        const hasMeshBase = model.meshes.some((m) => m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "") === nodeKey);
+        if (hasMeshBase) {
+          isCurrentlyVisible = model.meshes.some((m) => {
+            const mBase = m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+            return mBase === nodeKey && prev[`${m.name}_lod_${m.lod}`] !== false;
+          });
+        }
+      }
+      if (nodeKey.startsWith("engine_glow:") && model?.engine_glows) {
+        const glowBaseName = nodeKey.substring("engine_glow:".length);
+        const hasGlowBase = model.engine_glows.some((g) => g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "") === glowBaseName);
+        if (hasGlowBase) {
+          isCurrentlyVisible = model.engine_glows.some((g) => {
+            const gBase = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+            return gBase === glowBaseName && prev[`engine_glow:${g.name}`] !== false;
+          });
+        }
+      }
       const nextVisibility = !isCurrentlyVisible;
       
       const updated = { ...prev, [nodeKey]: nextVisibility };
@@ -1295,6 +1327,53 @@ const handleDeleteNode = (name: string, type: string) => {
         });
       }
       
+      const normalizeMeshLods = () => {
+        if (!model) return;
+        const groupedMeshes = new Map<string, HODModel["meshes"]>();
+        model.meshes.forEach((m) => {
+          const baseName = m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+          if (!groupedMeshes.has(baseName)) groupedMeshes.set(baseName, []);
+          groupedMeshes.get(baseName)!.push(m);
+        });
+        groupedMeshes.forEach((meshes) => {
+          const visibleLods = [...meshes]
+            .sort((a, b) => a.lod - b.lod)
+            .filter((m) => updated[`${m.name}_lod_${m.lod}`] !== false);
+          if (visibleLods.length > 1) {
+            const keepKey = `${visibleLods[0].name}_lod_${visibleLods[0].lod}`;
+            meshes.forEach((m) => {
+              const lodKey = `${m.name}_lod_${m.lod}`;
+              updated[lodKey] = lodKey === keepKey;
+            });
+          }
+        });
+      };
+
+      const normalizeGlowLods = () => {
+        if (!model) return;
+        const groupedGlows = new Map<string, HODModel["engine_glows"]>();
+        model.engine_glows.forEach((g) => {
+          const baseName = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+          if (!groupedGlows.has(baseName)) groupedGlows.set(baseName, []);
+          groupedGlows.get(baseName)!.push(g);
+        });
+        groupedGlows.forEach((glows) => {
+          const visibleLods = [...glows]
+            .sort((a, b) => a.lod - b.lod)
+            .filter((g) => updated[`engine_glow:${g.name}`] !== false);
+          if (visibleLods.length > 1) {
+            const keepKey = `engine_glow:${visibleLods[0].name}`;
+            glows.forEach((g) => {
+              const lodKey = `engine_glow:${g.name}`;
+              updated[lodKey] = lodKey === keepKey;
+            });
+          }
+        });
+      };
+
+      normalizeMeshLods();
+      normalizeGlowLods();
+
       return updated;
     });
   };
@@ -2307,7 +2386,33 @@ const handleDeleteNode = (name: string, type: string) => {
                     Add Node
                   </button>
                   <button
-                    onClick={() => setVisibleMeshes({})}
+                    onClick={() => {
+                      const resetVisibility: Record<string, boolean> = {};
+                      const groupedMeshes = new Map<string, HODModel["meshes"]>();
+                      model?.meshes.forEach((m) => {
+                        const baseName = m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+                        if (!groupedMeshes.has(baseName)) groupedMeshes.set(baseName, []);
+                        groupedMeshes.get(baseName)!.push(m);
+                      });
+                      groupedMeshes.forEach((meshes) => {
+                        [...meshes].sort((a, b) => a.lod - b.lod).forEach((m, idx) => {
+                          resetVisibility[`${m.name}_lod_${m.lod}`] = idx === 0;
+                        });
+                      });
+
+                      const groupedGlows = new Map<string, HODModel["engine_glows"]>();
+                      model?.engine_glows.forEach((g) => {
+                        const baseName = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
+                        if (!groupedGlows.has(baseName)) groupedGlows.set(baseName, []);
+                        groupedGlows.get(baseName)!.push(g);
+                      });
+                      groupedGlows.forEach((glows) => {
+                        [...glows].sort((a, b) => a.lod - b.lod).forEach((g, idx) => {
+                          resetVisibility[`engine_glow:${g.name}`] = idx === 0;
+                        });
+                      });
+                      setVisibleMeshes(resetVisibility);
+                    }}
                     style={{
                       fontSize: "10px",
                       padding: "3px 8px",

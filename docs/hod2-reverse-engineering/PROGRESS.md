@@ -17,12 +17,23 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 - ✅ Grouped EngineGlow LODs in Hierarchy Tree: Adjusted `HierarchyTree.tsx` to visually group multiple LOD instances of `EngineGlow` into a single node with an LOD count, bringing its behavior inline with standard mesh nodes. Also updated the `GlowLODInspector` and tree toggle logic to match `_LOD#` suffixes parsed from real HODs.
 - ✅ Added LOD Addition/Deletion to GlowLODInspector: Transferred LOD management logic (Add LOD, Delete LOD, Move Up/Down) from `MeshLODInspector` directly into the `GlowLODInspector` for a unified UI experience.
 - ✅ Restored Collision Mesh OBJ Import/Export: Re-introduced the "Import OBJ" and "Export OBJ" functionality to the Collision Mesh inspector, ensuring users can replace physical collision hulls with custom low-poly models, rather than relying exclusively on auto-calculating bounds.
+- ✅ Restored HOD 2.0 KDOP collision loading for editor COL nodes: `parser/src/hod.rs` now parses DTRM `KDOP` payloads using the 444-byte KDOP header, converts vertices/faces into `HODCollisionMesh`, and associates the following `COLD` name-only chunk (e.g. `Root`) with that mesh. Preserved KDOP/COLD chunks no longer cause duplicate unused collision vertex data to be appended to POOL on save. `src/components/Viewport.tsx` now renders collision BBOX and BSPH helpers even when KDOP/TRIS geometry is present, so bounds do not disappear after collision mesh generation.
+- ✅ Verification for COL/KDOP fix: `cargo check` passed, `npm run build` passed, `cargo run --bin dump_col_info -- .../hgn_ioncannonfrigate.hod` now reports `Collision Mesh 0 (Root) - parent: "Root"` and a real KDOP vertex, and `cargo run --bin verify_lossless` completed with structural reparse successes plus DAE fallback output `DAE generation succeeded! Output size: 342189 bytes`. The verify script still prints known size mismatch lines for generated files; mesh/joint/nav/marker/burn counts reparse successfully.
+- ✅ Removed unrelated collision creation from engine/joint inspectors: `src/components/Inspector.tsx` no longer shows the "Collision Hull" add/remove block in the shared joint / engine nozzle inspector. Collision creation and editing remain scoped to the COL/collision node flow. `docs/ui-source-of-truth/05-inspector-behavior.md` now states this UI boundary explicitly.
+- ✅ Added Engine Glow LOD visibility toggles: `src/components/Inspector.tsx` now passes shared `visibleMeshes`/`onToggleVisibility` into `GlowLODInspector` and shows per-LOD eye toggles keyed as `engine_glow:<glow name>`, matching `Viewport.tsx` engine glow visibility checks.
+- ✅ Enforced one visible LOD per node: `src/App.tsx` now initializes Engine Glow LOD visibility like mesh LODs and inspector visibility toggles hide sibling LODs for the same mesh/glow base. `src/components/HierarchyTree.tsx` also normalizes mesh and Engine Glow group visibility so base-eye toggles and Show All keep only the lowest LOD visible per group.
+- ✅ Fixed grouped Mesh delete behavior: `src/components/HierarchyTree.tsx` now treats context-menu deletes on Mesh rows as base-node deletes, removing every mesh LOD whose normalized base name matches the selected row and clearing stale base/LOD visibility keys. `docs/ui-source-of-truth/04-rename-delete-reparent.md` documents this grouped delete rule.
+- ✅ HOD 1.0 retrofit Phase 1 complete: `parser/src/hod.rs` now parses `DOCK` for both HOD 1.0 and HOD 2.0 via separate legacy/extended layout fallbacks, loads companion `.mad` animations for HOD 1.0 before falling back to embedded `MRKR/KEYF`, and prevents `synthesize_engine_nozzles_v1` from converting `e#` NAVL rows into guessed engine burns when explicit BURN chunks are already present. Verification: `cargo check` passed; `cargo run --bin hod_semantic_dump -- testing/ter_fenris/ter_fenris_1.0.hod` logged `Loaded 1 animations from companion MAD file.` and still reports `NavLights=4, EngineBurns=4` before frontend compatibility transforms.
+- ✅ HOD 1.0 retrofit Phase 2 complete: `HODTexture` now carries `legacy_storage_y_flipped` with serde defaulting, HOD 1.0 inline `LMIP` textures set it during parse, and `generate_lmip_texture_chunks_and_pool` flips decoded RGBA rows only for those legacy textures before HOD 2.0 texture-pool compression. HOD 2.0, DAE, texture packer, and manual TGA import constructors set the flag false. Verification: `cargo check` passed after updating Rust constructors and the frontend `HODTexture` interface.
+- ✅ HOD 1.0 retrofit Phase 3 complete: `parse_basic_mesh` now consumes every HOD 1.0 primitive group for each BMSH part instead of assuming one group. This fixes the Zephyrus parse failure (`Error in BMSH under MULT: failed to fill whole buffer`). Verification: `cargo run --bin hod_semantic_dump -- .../freespace_remastered/ship/ter_zephyrus/ter_zephyrus.hod` now succeeds and reports `Meshes=7`, `NavLights=4`, `EngineBurns=4`, `CollisionMeshes=1`, and `Dockpaths=4`.
 
 ## Current Issues
 - `EngineBurn` trails might render flipped in our WebGL preview because the WebGL renderer correctly applies the nozzle's 180-degree rotation to the trail vertices, matching the HOD data. We need to verify if the vanilla game engine dynamic thrust vectoring ignores the nozzle's base rotation for `EngineBurn` effects.
+- Collision helper visuals compile and parser verification confirms KDOP geometry loads, but this session did not launch the Tauri viewport for a visual screenshot pass.
+- HOD 1.0 retrofit issues planned for next parser pass: Zephyrus (`.../freespace_remastered/ship/ter_zephyrus/ter_zephyrus.hod`) fails in `parse_basic_mesh` with `Error in BMSH under MULT: failed to fill whole buffer`; HOD 1.0 DOCK chunks are currently skipped because parsing is gated behind `context.is_v2`; Fenris HOD 1.0 (`testing/ter_fenris/ter_fenris_1.0.hod`) has a companion `.mad` file but companion MAD loading is currently gated to HOD 2.0; frontend HOD 1.0 compatibility transform `synthesize_engine_nozzles_v1` can reclassify `e#` NAVL rows as engine burns after load.
 
 **Phase:** Phase 6 — Frontend UI & Editor UX  
-**Status:** Implementing UI/UX rules from UI Source of Truth. Engine nozzle rules, LOD inspectors, and assembly rules successfully applied.
+**Status:** Implementing UI/UX rules from UI Source of Truth. Engine nozzle rules, LOD inspectors, assembly rules, and COL/KDOP viewport loading applied.
 **Last Updated:** 2026-05-31  
 **Updated By:** OpenCode Agent (UI implementation)
 
@@ -359,7 +370,7 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 1. **Compression size parity remains non-byte-exact:** Generated compressed POOL sizes still differ from HODOR because compressor choices differ, but decompressed structures and round-trip parsing pass.
 
-2. **KDOP direction record format partially unknown:** The 8 floats per direction record store projection bounds and direction vectors, but the exact field order is approximated. The game engine accepts our format, but byte-exact matching with HODOR requires further investigation.
+2. **KDOP direction record format partially unknown:** The editor can now parse KDOP vertices/faces for display and generate accepted KDOP payloads, but the exact field order of the 8 floats per direction record remains approximated. Byte-exact matching with HODOR requires further investigation.
 
 3. **SCAR battle scars not generated from scratch (MEDIUM):** SCAR chunks only preserved from originals. Reverse engineering ongoing in `analyze_scar.rs` / `analyze_scar2.rs`.
 
@@ -369,18 +380,24 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 6. **Animations not processed from DAE:** ANIM[...] nodes in DAE are not parsed. The HOD format uses a different animation system than DAEnerys. Animation tab is currently empty for DAE imports.
 
+7. **Viewport collision visual QA pending:** `npm run build` passes and sample KDOP parsing is verified, but COL node BBOX/BSPH/KDOP rendering should still be visually checked in the Tauri app against `hgn_ioncannonfrigate.hod`.
+
 ---
 
 ## Next Steps
 
-1. **Investigate ter_centaur_from_dae.hod crash** — strip chunks one at a time to isolate cause (CRITICAL — see `collision-fixes-plan.md`)
-2. **Implement mesh decimation** for auto-generating collision meshes from visible mesh (HIGH)
-3. **Fix auto-generate button visibility** — show even when no collision geometry exists yet
-4. **Fix COLD duplication risk** — deduplicate preserved chunks
-5. **Complete SCAR reverse engineering** and implement generator
-6. **Fix tangent path** for `has_mult_tags` flat-list parts
-7. **Extend DAE texture mapping** to resolve non-diffuse slots
-8. **Implement animation system** for DAE imports
+1. **Visually QA COL node rendering** for `hgn_ioncannonfrigate.hod` in the Tauri app: confirm KDOP mesh, BBOX, and BSPH are all visible and sized correctly.
+2. **Fix HOD 1.0 texture orientation on HOD 2.0 save** without changing HOD 2.0 or DAE texture orientation: track legacy inline texture axis/origin and compensate only during generated HOD 2.0 texture-pool compression.
+3. **Fix Zephyrus HOD 1.0 BMSH parsing** by adding a bounded HOD 1.0 BMSH parser path that handles variant primitive-group/index layouts instead of assuming one fixed per-part layout.
+4. **Implement HOD 1.0 DOCK parsing** using the legacy count/name/parent/point layout and verify dockpaths appear in the editor.
+5. **Load companion `.mad` animations for HOD 1.0** before falling back to embedded `MRKR/KEYF`, using `testing/ter_fenris/ter_fenris_1.0.mad` as the fixture.
+6. **Constrain HOD 1.0 NAVL-to-engine-burn compatibility synthesis** so real NAVL entries are not reclassified as engine burns when explicit BURN chunks already exist.
+7. **Implement mesh decimation** for auto-generating collision meshes from visible mesh (HIGH)
+8. **Fix COLD duplication risk** — deduplicate preserved chunks
+9. **Complete SCAR reverse engineering** and implement generator
+10. **Fix tangent path** for `has_mult_tags` flat-list parts
+11. **Extend DAE texture mapping** to resolve non-diffuse slots
+12. **Implement animation system** for DAE imports
 
 ---
 
@@ -429,7 +446,7 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ---
 
-**Latest Test Results:** `cargo run --bin verify_lossless` round-trip parsing succeeds for all test files. `cargo run --bin test_hodor_replication` passes 2/3 (`ter_pharos`, `ter_fenris`; `ter_centaur` fails on missing TGA file, unrelated to collision). `cargo check --lib` succeeds.
+**Latest Test Results:** `npm run build` succeeds after the HOD 1.0 retrofit fixes (Vite warning only: main chunk larger than 500 kB). `cargo run --bin verify_lossless` completed after the parser changes; generated file size mismatch lines remain expected, and structural reparses report `SUCCESS: Re-parsed generated file!` with matching mesh/joint/nav/marker/burn counts plus DAE fallback `DAE generation succeeded! Output size: 342189 bytes`. `cargo check` succeeds.
 
 **Document Version:** 10.0  
 **Last Updated:** 2026-05-30  

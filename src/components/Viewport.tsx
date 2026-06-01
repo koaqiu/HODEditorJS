@@ -119,6 +119,7 @@ export interface HODTexture {
   png_preview?: string;
   png_data?: string;
   source_path?: string;
+  legacy_storage_y_flipped?: boolean;
 }
 
 export interface HODKeyframe {
@@ -1966,8 +1967,14 @@ export const Viewport: React.FC<ViewportProps> = ({
           colGroup.name = `collision:${col.name}`;
           colGroup.renderOrder = 1;
 
+          const hasCollisionGeometry = !!(
+            col.mesh &&
+            col.mesh.parts &&
+            col.mesh.parts.some(part => part.vertices.length > 0 && part.indices.length > 0)
+          );
+
           // Render actual mesh if it exists
-          if (col.mesh && col.mesh.parts && col.mesh.parts.length > 0 && col.mesh.parts[0].indices.length > 0) {
+          if (hasCollisionGeometry) {
             const meshMat = new THREE.MeshBasicMaterial({
               color: "#ff1744",
               transparent: true,
@@ -2001,16 +2008,30 @@ export const Viewport: React.FC<ViewportProps> = ({
               m.add(w);
               colGroup.add(m);
             });
-          } else {
-            // Fallback: Semi-transparent red box
-            const sizeX = col.max_extents.x - col.min_extents.x;
-            const sizeY = col.max_extents.y - col.min_extents.y;
-            const sizeZ = col.max_extents.z - col.min_extents.z;
-            const boxGeo = new THREE.BoxGeometry(sizeX || 0.1, sizeY || 0.1, sizeZ || 0.1);
+          }
+
+          const sizeX = col.max_extents.x - col.min_extents.x;
+          const sizeY = col.max_extents.y - col.min_extents.y;
+          const sizeZ = col.max_extents.z - col.min_extents.z;
+          const hasValidBox = [
+            col.min_extents.x,
+            col.min_extents.y,
+            col.min_extents.z,
+            col.max_extents.x,
+            col.max_extents.y,
+            col.max_extents.z,
+            sizeX,
+            sizeY,
+            sizeZ,
+          ].every(Number.isFinite) && (Math.abs(sizeX) > 0.0001 || Math.abs(sizeY) > 0.0001 || Math.abs(sizeZ) > 0.0001);
+
+          if (hasValidBox) {
+            // BBOX helper remains visible even when KDOP/TRIS geometry is present.
+            const boxGeo = new THREE.BoxGeometry(Math.abs(sizeX), Math.abs(sizeY), Math.abs(sizeZ));
             const boxMat = new THREE.MeshBasicMaterial({
               color: "#ff1744",
               transparent: true,
-              opacity: 0.15,
+              opacity: hasCollisionGeometry ? 0.08 : 0.15,
               wireframe: false,
               depthWrite: false,
             });
@@ -2031,9 +2052,18 @@ export const Viewport: React.FC<ViewportProps> = ({
             );
             boxMesh.position.copy(boxCenter);
             colGroup.add(boxMesh);
+          } else if (!hasCollisionGeometry) {
+            const markerGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const markerMat = new THREE.MeshBasicMaterial({ color: "#ff1744", transparent: true, opacity: 0.35, depthWrite: false });
+            const markerMesh = new THREE.Mesh(markerGeo, markerMat);
+            markerMesh.renderOrder = 1;
+            colGroup.add(markerMesh);
+          }
 
-            // Wireframe sphere representing center and radius
-            const sphereGeo = new THREE.SphereGeometry(col.radius || 0.1, 16, 16);
+          const hasValidSphere = Number.isFinite(col.radius) && col.radius > 0.0001 && isFiniteVector(col.center);
+          if (hasValidSphere) {
+            // BSPH helper remains visible even when KDOP/TRIS geometry is present.
+            const sphereGeo = new THREE.SphereGeometry(col.radius, 16, 16);
             const sphereMat = new THREE.MeshBasicMaterial({
               color: "#ff1744",
               wireframe: true,

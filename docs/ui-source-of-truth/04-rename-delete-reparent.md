@@ -54,6 +54,12 @@ Deleting a weapon group collects all group joints, then expands each group joint
 
 Weapon group delete must not only delete prefix-matching joints, and must not reparent group meshes/markers to `Root`.
 
+## Mesh Delete
+
+Mesh rows are grouped by normalized base name, stripping trailing `_lod_#` and `_LOD#` suffixes.
+
+Deleting a mesh group row removes every `model.meshes` entry whose normalized base name matches the selected row, not just one exact LOD key. Delete also clears the base visibility key and each removed LOD visibility key from `visibleMeshes`.
+
 ## Rename
 
 Rename uses `window.prompt` and rejects empty/no-op inputs. Duplicate checks scan joints, meshes, nav lights, markers, engine burns, engine glows, engine shapes, collision meshes, and dockpaths.
