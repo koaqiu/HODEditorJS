@@ -5266,12 +5266,16 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                         }
                     }
                 } else if chunk.id == "HVMD" {
-                    // Extract original LMIP and STAT chunks from HVMD for preservation
+                    // Extract original LMIP/TEXM and STAT/MATT chunks from HVMD for preservation
                     for child in &chunk.children {
-                        if child.id == "LMIP" {
-                            original_lmip_chunks.push(child.clone());
-                        } else if child.id == "STAT" {
-                            original_stat_chunks.push(child.clone());
+                        if child.id == "LMIP" || child.id == "TEXM" {
+                            let mut child_clone = child.clone();
+                            child_clone.id = "LMIP".to_string();
+                            original_lmip_chunks.push(child_clone);
+                        } else if child.id == "STAT" || child.id == "MATT" {
+                            let mut child_clone = child.clone();
+                            child_clone.id = "STAT".to_string();
+                            original_stat_chunks.push(child_clone);
                         }
                     }
                 }

@@ -263,7 +263,14 @@ function App() {
 
           const createProxyJoint = (childName: string, navName: string, prefix: string) => {
             const info = getNavlightInfo(navName);
-            const newJointName = `${prefix}_${childName}_from_${navName}`;
+            let newJointName = `${prefix}_${childName}_from_${navName}`;
+            
+            if (prefix.includes("BurnProxy") || prefix.includes("GlowProxy") || prefix.includes("ShapeProxy")) {
+                let idx = 0;
+                while (m.joints.some(j => j.name === `EngineNozzle${idx}`)) idx++;
+                newJointName = `EngineNozzle${idx}`;
+            }
+
             if (!m.joints.some(j => j.name === newJointName)) {
               m.joints.push({
                 name: newJointName,
