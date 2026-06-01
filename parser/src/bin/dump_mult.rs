@@ -1,40 +1,11 @@
-use hwr_hod_parser::iff::IffChunk;
-use std::fs::File;
-use std::io::{Cursor, Read, Seek};
+use hwr_hod_parser::hod::HODModel;
+use std::fs;
 
-fn extract_chunks(chunk: &IffChunk, indent: usize) {
-    let ind = " ".repeat(indent);
-    println!(
-        "{}Chunk: {} (Size: {}, Version: {})",
-        ind,
-        chunk.id,
-        chunk.data.len(),
-        chunk.version
-    );
-    if chunk.id.trim() == "DOCK" {
-        let mut r = Cursor::new(&chunk.data);
-        if let Ok(first) = byteorder::ReadBytesExt::read_u32::<byteorder::LittleEndian>(&mut r) {
-            println!("{}  DOCK first u32 (LE): {}", ind, first);
-        }
-        if let Ok(second) = byteorder::ReadBytesExt::read_u32::<byteorder::LittleEndian>(&mut r) {
-            println!("{}  DOCK second u32 (LE): {}", ind, second);
-        }
+fn main() {
+    let bytes1 = fs::read("../testing/ter_zephyrus/ter_zephyrus_1.0_original.hod").unwrap();
+    let model1 = HODModel::parse(&bytes1).unwrap();
+    println!("HOD 1.0 MESHES:");
+    for mesh in &model1.meshes {
+        println!("  Mesh: {} (parent: {})", mesh.name, mesh.parent_name);
     }
-    for child in &chunk.children {
-        extract_chunks(child, indent + 2);
-    }
-}
-
-fn main() -> std::io::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    let path = if args.len() > 1 {
-        &args[1]
-    } else {
-        "asteroid_3.hod"
-    };
-    let mut f = File::open(path)?;
-    while let Ok(root) = IffChunk::read_chunk(&mut f) {
-        extract_chunks(&root, 0);
-    }
-    Ok(())
 }
