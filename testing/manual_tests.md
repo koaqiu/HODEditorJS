@@ -258,3 +258,36 @@ Test hod: `ter_zephyrus`
     - Full meshes shown: [ ] 
     - Correct Ship Orientation: [ ] 
     - All expected nodes working: [ ] 
+
+---
+SHA: `21c1324`
+Timestamp: `01/06/2026 16:15`
+Test hod: `ter_zephyrus`
+
+**Goal**: Verify HOD 1.0 -> 2.0 material assignment fix and correct scaling extraction.
+
+1.0 HOD Test:
+
+1. Opened `*_1.0_original.hod` in editor:
+    - No loading errors: [ ] 
+    - Textures orientation: [ ] 
+    - Textures assigned to correct materials: [ ] 
+    - Full meshes shown: [ ] 
+    - Collision mesh loaded: [ ] 
+    - All expected nodes loaded: [ ] 
+2. Saved as `*_from_1.0_to_2.0.hod`:
+    - No saving errors: [ ] 
+3. Opened `_from_1.0_to_2.0.hod` in editor again:
+    - No loading errors: [ ] 
+    - Textures orientation: [ ] 
+    - Textures assigned to correct materials: [ ] 
+    - Full meshes shown: [ ] 
+    - Collision mesh loaded: [ ] 
+    - All expected nodes loaded: [ ] 
+4. Loaded `_from_1.0_to_2.0.hod` in game:
+    - No crash on loading: [ ] 
+    - Textures orientation: [ ] 
+    - Textures assigned to correct materials: [ ] 
+    - Full meshes shown: [ ] 
+    - Correct Ship Orientation: [ ] 
+    - All expected nodes working: [ ] 
