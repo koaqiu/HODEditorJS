@@ -14,6 +14,7 @@ This spec defines the boundaries between global UI state and local component sta
 - **Memoization**: Heavy calculations, such as traversing the entire joint tree for diagnostics or filtering nodes, **must** be wrapped in `useMemo` hooks.
 - **Avoid Extraneous Renders**: Do not trigger top-level React renders for high-frequency events (e.g., mouse dragging in the viewport or hovering). Use refs (`useRef`) and direct DOM manipulation or localized state updates for such interactions.
 - **Large Lists**: If the hierarchy tree becomes extremely large, consider windowing (virtualization) solutions.
+- **Tauri IPC & Loading Screens**: Tauri's `invoke` API serializes payloads to JSON. When passing massive objects (like the entire HOD `model`), `JSON.stringify` runs synchronously on the main thread, completely freezing the UI. If you trigger a loading state (`setIsLoading(true)`) immediately before an `await invoke(...)`, React's batched state updates will fail to paint the loading screen before the freeze occurs. **Rule:** You MUST wrap heavy `invoke` calls in a `setTimeout(() => { ... }, 50)` block to yield the main thread and guarantee the browser paints the loading screen overlay.
 
 ## Best Practices
 

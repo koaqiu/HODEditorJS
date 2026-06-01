@@ -84,3 +84,11 @@ It is an established pattern in this repo for agents to write temporary, throwaw
 4. **Verification**:
    - If UI: Update `docs/ui-source-of-truth/` if behavior fundamentally changed.
    - If Parser: Run `cd parser && cargo run --bin verify_lossless`.
+
+## 6. Pre-Flight Checklist (Preventing Regressions)
+
+To prevent accidental feature loss (such as breaking UI loading screens or destroying UX additions), follow these rules:
+
+1. **Do not remove `setTimeout` blocks indiscriminately.** Tauri's IPC `invoke` API serializes payloads synchronously. Heavy operations (like passing the entire `HODModel` or parsing large JSON strings) will block the React render thread. You **MUST** ensure `setIsLoading(true)` is followed by a `setTimeout(..., 50)` before a heavy `invoke` call, allowing the browser to paint the loading screen before it freezes.
+2. **Leave Trap Comments.** If you add a hack or workaround (like the `setTimeout` trick), leave a comment explicitly forbidding future agents from "cleaning it up".
+3. **Verify the UI State.** If you modify any frontend file that triggers heavy Rust processing (saving, importing, generating meshes), verify that the loading spinner overlay actually mounts and is visible before the application locks up during testing.
