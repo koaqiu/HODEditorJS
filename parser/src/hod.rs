@@ -87,8 +87,6 @@ pub struct HODTexture {
     pub png_data: Option<String>, // Base64 encoded PNG for WebGL high-resolution rendering (max 1024px)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>, // Original path if imported from TGA
-    #[serde(default)]
-    pub legacy_storage_y_flipped: bool, // HOD 1.0 inline DXT uses opposite row order from HOD 2.0 pool convention. When true, the PNG's flipped orientation IS the correct HOD 2.0 pool orientation (no un-flip needed at save).
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1166,7 +1164,12 @@ impl HODModel {
                         }
                     }
                     if let Some(mut kdop_collision) = pending_kdop_collision.take() {
-                        kdop_collision.mesh.parent_name = kdop_collision.name.clone();
+                        let root_name = joints
+                            .first()
+                            .map(|j| j.name.clone())
+                            .unwrap_or_else(|| "Root".to_string());
+                        kdop_collision.name = "CollisionMesh".to_string();
+                        kdop_collision.mesh.parent_name = root_name;
                         collision_meshes.push(kdop_collision);
                     }
                 }
@@ -2648,9 +2651,14 @@ fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HODTe
     let mut png_preview = None;
     let mut png_data = None;
 
-    if let Some(ref rgba) = decoded_rgba {
-        png_preview = encode_b64_png_thumbnail(rgba, width, height, 128);
-        png_data = encode_b64_png_thumbnail(rgba, width, height, 1024);
+    if let Some(mut rgba) = decoded_rgba {
+        // HOD 2.0 textures are stored flipped in the DXT stream (DirectX convention).
+        // Un-flip them here so the editor UI preview shows them correctly.
+        if context.is_v2 {
+            flip_rgba_vertical_in_place(&mut rgba, width, height);
+        }
+        png_preview = encode_b64_png_thumbnail(&rgba, width, height, 128);
+        png_data = encode_b64_png_thumbnail(&rgba, width, height, 1024);
     }
 
     // If png_preview is None, we attempt to load from disk (.TGA files) inside the uncompressed folder or HOD directory!
@@ -2751,7 +2759,6 @@ fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HODTe
         png_preview,
         png_data,
         source_path: None,
-        legacy_storage_y_flipped: true, // The inline DXT was flipped vertically on load, so we need to flip it back on save to HOD 2.0 pool
     })
 }
 
@@ -4936,9 +4943,10 @@ fn generate_lmip_texture_chunks_and_pool(
         if width == 0 || height == 0 {
             continue;
         }
-        if !texture.legacy_storage_y_flipped {
-            flip_rgba_vertical_in_place(&mut rgba, width, height);
-        }
+        // HOD 2.0 POOL chunks store textures bottom-up (DirectX convention).
+        // Our internal format (from TGA/PNG or extracted) is always top-down.
+        // So we ALWAYS flip it before compression.
+        flip_rgba_vertical_in_place(&mut rgba, width, height);
 
         let mut mip_count = 0usize;
         let mut mip_width = width;
