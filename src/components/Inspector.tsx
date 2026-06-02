@@ -2539,7 +2539,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                 }
               }
 
-              onModelChange?.({ ...model, textures: updatedTextures });
+              onModelChange?.({ ...model, textures: updatedTextures, textures_modified: true });
               
               const names = importedTexs.map(t => t.name).join(", ");
               invoke("log_event", { level: "INFO", message: `Imported and bound TGA textures: ${names}` }).catch(console.error);

@@ -163,6 +163,7 @@ export interface HODModel {
   collision_meshes: HODCollisionMesh[];
   dockpaths: HODDockpath[];
   animations?: HODAnimation[];
+  textures_modified: boolean;
 }
 
 const isFiniteVector = (v: any): boolean => {

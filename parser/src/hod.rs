@@ -223,6 +223,8 @@ pub struct HODModel {
     pub dockpaths: Vec<HODDockpath>,
     #[serde(default)]
     pub animations: Vec<HODAnimation>,
+    #[serde(default)]
+    pub textures_modified: bool,
     #[serde(skip)]
     pub preserved_chunks: Vec<IffChunk>,
 }
@@ -307,6 +309,7 @@ impl HODModel {
             collision_meshes: Vec::new(),
             dockpaths: Vec::new(),
             animations: Vec::new(),
+            textures_modified: false,
             preserved_chunks: Vec::new(),
         }
     }
@@ -1255,6 +1258,7 @@ impl HODModel {
             collision_meshes,
             dockpaths,
             animations: Vec::new(),
+            textures_modified: false,
             preserved_chunks,
         };
 
@@ -5367,6 +5371,13 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
     }
 
     // Fall back to regenerating textures from model data if original wasn't available
+    // OR if the user explicitly modified textures (added, deleted, or toggled properties).
+    if model.textures_modified {
+        original_tex_preserved = false;
+        // Strip out any original LMIP chunks since we are regenerating them
+        original_lmip_chunks.clear();
+    }
+
     let mut generated_texture_chunks = Vec::new();
     if !original_tex_preserved {
         let (gen_chunks, generated_texture_pool) =

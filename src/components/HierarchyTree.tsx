@@ -3629,7 +3629,7 @@ const handleDeleteNode = (name: string, type: string) => {
                       }
                       return t;
                     });
-                    onModelChange?.({ ...model, textures: updatedTextures });
+                    onModelChange?.({ ...model, textures: updatedTextures, textures_modified: true });
                     setContextMenu(null);
                   }}
                 >
@@ -3643,7 +3643,7 @@ const handleDeleteNode = (name: string, type: string) => {
                     e.stopPropagation();
                     if (!model) return;
                     const updatedTextures = model.textures.filter(t => t.name !== contextMenu.name);
-                    onModelChange?.({ ...model, textures: updatedTextures });
+                    onModelChange?.({ ...model, textures: updatedTextures, textures_modified: true });
                     setContextMenu(null);
                   }}
                 >

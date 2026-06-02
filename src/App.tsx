@@ -396,7 +396,8 @@ function App() {
       engine_burns: [],
       engine_glows: [],
       engine_shapes: [],
-      animations: []
+      animations: [],
+      textures_modified: false
     };
     
     // Slight delay to ensure React unmounts previous Viewport and clears WebGL context
