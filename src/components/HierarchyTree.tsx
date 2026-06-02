@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { HODModel } from "./Viewport";
-import { Folder, FolderOpen, Tag, ChevronDown, ChevronRight, Search, Box, Eye, EyeOff, Radio, Activity, Shield, Flame, Palette, Crosshair, Plus, Trash2, AlertTriangle, Info , Image, FlipVertical } from "lucide-react";
+import { Folder, FolderOpen, Tag, ChevronDown, ChevronRight, Search, Box, Eye, EyeOff, Radio, Activity, Shield, Flame, Palette, Crosshair, Plus, Trash2, AlertTriangle, Info , Image, FlipVertical, Download, Upload } from "lucide-react";
 
 interface HierarchyTreeProps {
   model: HODModel | null;
@@ -131,6 +131,68 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   const [activeTab, setActiveTab] = useState<"hierarchy" | "materials" | "animations" | "targetboxes">("hierarchy");
   const [selectedBoxIdx, setSelectedBoxIdx] = useState<number | null>(null);
   const [showLuaCode, setShowLuaCode] = useState(false);
+
+  const handleExportNodes = async () => {
+    if (!model) return;
+    const exportData = {
+      joints: model.joints,
+      markers: model.markers,
+      nav_lights: model.nav_lights,
+      engine_burns: model.engine_burns,
+      engine_glows: model.engine_glows,
+      engine_shapes: model.engine_shapes,
+      collision_meshes: model.collision_meshes,
+      dockpaths: model.dockpaths,
+    };
+    try {
+      const savedPath = await invoke<string | null>("save_text_file", {
+        defaultName: `${model.name || "model"}_nodes.json`,
+        filters: ["json"],
+        contents: JSON.stringify(exportData, null, 2),
+      });
+      if (savedPath && setStatusMsg) {
+        setStatusMsg("Successfully exported node tree!");
+      }
+    } catch (e) {
+      console.error("Failed to export node JSON", e);
+      if (setStatusMsg) setStatusMsg("Failed to export node tree");
+    }
+  };
+
+  const handleImportNodes = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          if (onModelChange && model) {
+            onModelChange({
+              ...model,
+              joints: data.joints || model.joints,
+              markers: data.markers || model.markers,
+              nav_lights: data.nav_lights || model.nav_lights,
+              engine_burns: data.engine_burns || model.engine_burns,
+              engine_glows: data.engine_glows || model.engine_glows,
+              engine_shapes: data.engine_shapes || model.engine_shapes,
+              collision_meshes: data.collision_meshes || model.collision_meshes,
+              dockpaths: data.dockpaths || model.dockpaths,
+            });
+            if (setStatusMsg) setStatusMsg("Successfully imported node tree!");
+          }
+        } catch (err) {
+          console.error("Failed to parse node JSON", err);
+          if (setStatusMsg) setStatusMsg("Failed to parse node JSON");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
 
   const getShipBounds = () => {
     let minX = 0, minY = 0, minZ = 0;
@@ -2375,14 +2437,56 @@ const handleDeleteNode = (name: string, type: string) => {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div className="panel-header" style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "10px 14px", alignItems: "stretch", borderBottom: "1px solid var(--border-color)", background: "rgba(10, 16, 27, 0.3)" }}>
           {/* Row 1: Title and Actions */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
             <span style={{ fontWeight: "700", textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.08em", color: "var(--accent-cyan)" }}>
               {activeTab === "hierarchy" ? "Skeleton Tree" : activeTab === "materials" ? "Material Library" : activeTab === "animations" ? "Animation Library" : "Target Boxing Editor"}
             </span>
             
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", width: "100%" }}>
               {activeTab === "hierarchy" ? (
                 <>
+                  <button
+                    onClick={handleExportNodes}
+                    style={{
+                      fontSize: "10px",
+                      padding: "3px 8px",
+                      background: "rgba(22, 160, 255, 0.12)",
+                      color: "var(--accent-cyan)",
+                      border: "1px solid rgba(22, 160, 255, 0.3)",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontWeight: "600",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      whiteSpace: "nowrap"
+                    }}
+                    title="Export Node Tree (No Meshes)"
+                  >
+                    <Download size={11} />
+                    Export JSON
+                  </button>
+                  <button
+                    onClick={handleImportNodes}
+                    style={{
+                      fontSize: "10px",
+                      padding: "3px 8px",
+                      background: "rgba(22, 160, 255, 0.12)",
+                      color: "var(--accent-cyan)",
+                      border: "1px solid rgba(22, 160, 255, 0.3)",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontWeight: "600",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      whiteSpace: "nowrap"
+                    }}
+                    title="Import Node Tree"
+                  >
+                    <Upload size={11} />
+                    Import JSON
+                  </button>
                   <button
                     onClick={() => setIsAddNodeOpen(true)}
                     style={{

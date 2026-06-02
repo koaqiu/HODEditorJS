@@ -5,6 +5,7 @@ import { Toolbar } from "./components/Toolbar";
 import { HierarchyTree } from "./components/HierarchyTree";
 import { Inspector } from "./components/Inspector";
 import { AnimationDock } from "./components/AnimationDock";
+import { SettingsModal } from "./components/SettingsModal";
 import { Info, AlertTriangle, FolderOpen, FilePlus } from "lucide-react";
 import "./App.css";
 
@@ -15,6 +16,7 @@ function App() {
   const [transformMode, setTransformMode] = useState<"translate" | "rotate" | "scale">("translate");
   const [isSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedAnimIdx, setSelectedAnimIdx] = useState(0);
@@ -941,6 +943,7 @@ function App() {
         isSaving={isSaving}
         onNewClick={handleCreateNewHOD}
         onImportDAEClick={selectAndImportDAE}
+        onSettingsClick={() => setIsSettingsModalOpen(true)}
       />
 
 {/* Main Workspace Panels */}
@@ -1536,6 +1539,13 @@ function App() {
           </div>
         </div>
       )}
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        keeperTxtPaths={keeperTxtPaths}
+        setKeeperTxtPaths={setKeeperTxtPaths}
+      />
 
       {/* Bottom Status bar */}
       <footer className="statusbar">

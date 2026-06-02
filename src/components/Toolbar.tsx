@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Save, Hammer, FilePlus } from "lucide-react";
+import { FolderOpen, Save, Hammer, FilePlus, Settings } from "lucide-react";
 
 interface ToolbarProps {
   modelName: string;
@@ -9,6 +9,7 @@ interface ToolbarProps {
   isSaving: boolean;
   onNewClick?: () => void;
   onImportDAEClick?: () => void;
+  onSettingsClick?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -19,6 +20,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isSaving,
   onNewClick,
   onImportDAEClick,
+  onSettingsClick,
 }) => {
   return (
     <header className="toolbar" style={{ padding: "8px 16px", minHeight: "48px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -42,6 +44,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <button onClick={onNewClick} style={{ height: "30px" }}>
               <FilePlus size={14} style={{ color: "var(--accent-blue)" }} />
               <span>New HOD</span>
+            </button>
+          )}
+          {onSettingsClick && (
+            <button className="toolbar-btn outline" onClick={onSettingsClick} title="Settings">
+              <Settings size={16} /> Settings
             </button>
           )}
           <button className="toolbar-btn primary" onClick={onOpenClick} title="Open HOD File">

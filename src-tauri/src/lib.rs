@@ -108,23 +108,21 @@ fn select_hod_file() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn select_keeper_file() -> Result<Option<String>, String> {
-    write_log("INFO", "Opening native file dialog for keeper.txt...");
-    let file = rfd::FileDialog::new()
-        .add_filter("Keeper Text file", &["txt"])
-        .set_file_name("keeper.txt")
-        .pick_file();
+fn select_shader_directory() -> Result<Option<String>, String> {
+    write_log("INFO", "Opening native folder dialog for shader directory...");
+    let folder = rfd::FileDialog::new()
+        .pick_folder();
 
-    match &file {
+    match &folder {
         Some(path) => {
             write_log(
                 "INFO",
-                &format!("User selected keeper file: {}", path.to_string_lossy()),
+                &format!("User selected shader directory: {}", path.to_string_lossy()),
             );
             Ok(Some(path.to_string_lossy().to_string()))
         }
         None => {
-            write_log("INFO", "User canceled keeper file selection dialog");
+            write_log("INFO", "User canceled shader directory selection dialog");
             Ok(None)
         }
     }
@@ -760,7 +758,7 @@ pub fn run() {
             load_hod,
             save_hod,
             select_hod_file,
-            select_keeper_file,
+            select_shader_directory,
             log_event,
             get_shader_pipelines,
             load_shader_config,

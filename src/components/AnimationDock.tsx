@@ -1,5 +1,7 @@
 import React, { useRef, useCallback } from "react";
 import * as THREE from "three";
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { invoke } from "@tauri-apps/api/core";
 import {
   HODModel,
@@ -257,6 +259,147 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
     }
   };
 
+  const handleExportGLTF = () => {
+    if (!model || !activeAnim) return;
+    const scene = new THREE.Scene();
+    
+    // Create bones for all joints
+    const bones: Record<string, THREE.Bone> = {};
+    model.joints.forEach(j => {
+        const bone = new THREE.Bone();
+        bone.name = j.name;
+        
+        const m = j.local_transform.m;
+        const matrix = new THREE.Matrix4().set(
+            m[0][0], m[1][0], m[2][0], m[3][0],
+            m[0][1], m[1][1], m[2][1], m[3][1],
+            m[0][2], m[1][2], m[2][2], m[3][2],
+            m[0][3], m[1][3], m[2][3], m[3][3]
+        );
+        matrix.decompose(bone.position, bone.quaternion, bone.scale);
+        bones[j.name] = bone;
+    });
+
+    let rootBone: THREE.Bone | null = null;
+    model.joints.forEach(j => {
+        if (j.parent_name && bones[j.parent_name]) {
+            bones[j.parent_name].add(bones[j.name]);
+        } else {
+            if (!rootBone) rootBone = bones[j.name];
+        }
+    });
+
+    if (rootBone) scene.add(rootBone);
+
+    const tracks: THREE.KeyframeTrack[] = [];
+    activeAnim.tracks.forEach(track => {
+        if (track.keyframes.length === 0) return;
+        const times = track.keyframes.map(k => k.time);
+        
+        const posValues: number[] = [];
+        const rotValues: number[] = [];
+        const scaleValues: number[] = [];
+
+        track.keyframes.forEach(k => {
+            const p = k.position || { x:0, y:0, z:0 };
+            const q = k.rotation || { x:0, y:0, z:0, w:1 };
+            const s = k.scale || { x:1, y:1, z:1 };
+            posValues.push(p.x, p.y, p.z);
+            rotValues.push(q.x, q.y, q.z, q.w);
+            scaleValues.push(s.x, s.y, s.z);
+        });
+
+        tracks.push(new THREE.VectorKeyframeTrack(`${track.joint_name}.position`, times, posValues));
+        tracks.push(new THREE.QuaternionKeyframeTrack(`${track.joint_name}.quaternion`, times, rotValues));
+        tracks.push(new THREE.VectorKeyframeTrack(`${track.joint_name}.scale`, times, scaleValues));
+    });
+
+    const clip = new THREE.AnimationClip(activeAnim.name, activeAnim.duration, tracks);
+
+    const exporter = new GLTFExporter();
+    exporter.parse(scene, async (gltf) => {
+        try {
+            const savedPath = await invoke<string | null>("save_text_file", {
+                defaultName: `${model.name}_${activeAnim.name}.gltf`,
+                filters: ["gltf"],
+                contents: JSON.stringify(gltf, null, 2),
+            });
+            if (savedPath) alert(`glTF animation saved to:\n${savedPath}`);
+        } catch (err) {
+            console.error("Failed to save GLTF file:", err);
+            alert("Failed to save GLTF file");
+        }
+    }, (err) => {
+        console.error("Failed to export GLTF:", err);
+    }, { animations: [clip] });
+  };
+
+  const handleImportGLTF = async () => {
+    try {
+      const gltfContent = await invoke<string | null>("load_text_file", {
+        filters: ["gltf"],
+      });
+      if (!gltfContent) return;
+
+      const loader = new GLTFLoader();
+      loader.parse(gltfContent, '', (gltf: any) => {
+          if (!gltf.animations || gltf.animations.length === 0) {
+              alert("No animations found in GLTF file.");
+              return;
+          }
+          const clip = gltf.animations[0];
+          
+          const newAnim: HODAnimation = {
+              name: clip.name || "Imported_Anim",
+              duration: clip.duration,
+              tracks: []
+          };
+          
+          const trackMap = new Map<string, HODAnimationTrack>();
+          clip.tracks.forEach((t: any) => {
+              const [jointName, property] = t.name.split(".");
+              if (!trackMap.has(jointName)) {
+                  trackMap.set(jointName, { joint_name: jointName, keyframes: [] });
+              }
+              const hodTrack = trackMap.get(jointName)!;
+              
+              const times = Array.from(t.times as number[]);
+              times.forEach((time, i) => {
+                  let kf = hodTrack.keyframes.find(k => Math.abs(k.time - time) < 0.001);
+                  if (!kf) {
+                      kf = { time, position: {x:0, y:0, z:0}, rotation: {x:0, y:0, z:0, w:1}, scale: {x:1, y:1, z:1} };
+                      hodTrack.keyframes.push(kf);
+                  }
+                  
+                  const valIndex = i * t.getValueSize();
+                  if (property === "position") {
+                      kf.position = { x: t.values[valIndex], y: t.values[valIndex+1], z: t.values[valIndex+2] };
+                  } else if (property === "quaternion") {
+                      kf.rotation = { x: t.values[valIndex], y: t.values[valIndex+1], z: t.values[valIndex+2], w: t.values[valIndex+3] };
+                  } else if (property === "scale") {
+                      kf.scale = { x: t.values[valIndex], y: t.values[valIndex+1], z: t.values[valIndex+2] };
+                  }
+              });
+          });
+          
+          trackMap.forEach(t => {
+              t.keyframes.sort((a,b) => a.time - b.time);
+              newAnim.tracks.push(t);
+          });
+          
+          const updatedAnims = [...(model?.animations || []), newAnim];
+          onModelChange?.({ ...model!, animations: updatedAnims });
+          setSelectedAnimIdx(updatedAnims.length - 1);
+      }, (err: any) => {
+          console.error("Failed to parse GLTF:", err);
+          alert("Failed to parse GLTF file");
+      });
+    } catch (err) {
+      console.error("Failed to load GLTF file:", err);
+      alert("Failed to load GLTF file");
+    }
+  };
+
   // ─── Ruler helpers ────────────────────────────────────────────────────────
   const tickCount = Math.max(4, Math.ceil(duration / 0.5));
   const ticks: number[] = [];
@@ -472,6 +615,26 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
                 💾 Compile .MAD
               </button>
             )}
+
+            {/* Export GLTF */}
+            {hasAnims && (
+              <button
+                title="Export animation as glTF"
+                onClick={handleExportGLTF}
+                style={btnStyle("#00e676", "rgba(0,230,118,0.12)", "rgba(0,230,118,0.35)")}
+              >
+                ⬇ Export glTF
+              </button>
+            )}
+
+            {/* Import GLTF */}
+            <button
+              title="Import animation from glTF"
+              onClick={handleImportGLTF}
+              style={btnStyle("#00e676", "rgba(0,230,118,0.12)", "rgba(0,230,118,0.35)")}
+            >
+              ⬆ Import glTF
+            </button>
           </div>
         </div>
 
