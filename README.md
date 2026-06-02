@@ -350,9 +350,7 @@ This feature is under active development. Complex DAE files with advanced featur
 
 ### Compiled Binaries
 
-I have pre-compiles binaries for .deb, .rpm and .appimage for anyone to instantly run (linux).
-
-Windows users might have to install with the following instructions below.
+You can find pre-compiled release binaries for Linux (`.deb`, `.rpm`, `.AppImage`) and Windows (`.exe` installer) in the releases tab, or build them yourself using the instructions below.
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) v18.x or newer
@@ -371,11 +369,30 @@ npm install
 npm run tauri dev
 ```
 
-### Build Production Executable
+### Build Linux Binaries (deb, rpm, AppImage)
+Ensure you have the required OS-level GUI dependencies (like `librsvg2-devel` and `squashfs-tools` on Fedora).
 ```bash
-npm run build
-npm run tauri build
+# NO_STRIP=1 is required on modern Linux distributions (like Fedora 41) 
+# to bypass an outdated strip utility bundled in linuxdeploy for AppImages.
+NO_STRIP=1 npm run tauri build
 ```
+Binaries will be output to `src-tauri/target/release/bundle/`.
+
+### Cross-Compile Windows Installer (.exe) from Linux
+You can cross-compile the Windows installer directly from Linux using the `mingw-w64` toolchain and `makensis`.
+
+**Dependencies (Fedora example):**
+```bash
+sudo dnf install -y mingw64-gcc mingw64-gcc-c++ mingw64-winpthreads-static mingw64-nsis mingw32-nsis
+rustup target add x86_64-pc-windows-gnu
+```
+
+**Build Command:**
+```bash
+# We use a custom CARGO_TARGET_DIR to bypass a known dlltool bug if your repository path contains spaces.
+CARGO_TARGET_DIR=/tmp/cargo_target npm run tauri build -- --target x86_64-pc-windows-gnu --bundles nsis
+```
+The Windows installer will be output to `/tmp/cargo_target/x86_64-pc-windows-gnu/release/bundle/nsis/`.
 
 ---
 
