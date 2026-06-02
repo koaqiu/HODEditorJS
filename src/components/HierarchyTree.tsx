@@ -2493,7 +2493,7 @@ const handleDeleteNode = (name: string, type: string) => {
                     }}
                     title="Export Node Tree (No Meshes)"
                   >
-                    <Download size={11} />
+                    <Upload size={11} />
                     Export JSON
                   </button>
                   <button
@@ -2514,7 +2514,7 @@ const handleDeleteNode = (name: string, type: string) => {
                     }}
                     title="Import Node Tree"
                   >
-                    <Upload size={11} />
+                    <Download size={11} />
                     Import JSON
                   </button>
                   <button
