@@ -277,6 +277,18 @@ fn companion_mad_candidates(hod_path: &Path) -> Vec<PathBuf> {
     candidates
 }
 
+pub fn normalize_collision_meshes(model: &mut HODModel) {
+    if model.collision_meshes.is_empty() {
+        return;
+    }
+
+    model.collision_meshes.truncate(1);
+    let collision = &mut model.collision_meshes[0];
+    collision.name = "Root".to_string();
+    collision.mesh.name = "CollisionMesh".to_string();
+    collision.mesh.parent_name = "Root".to_string();
+}
+
 impl HODModel {
     pub fn new() -> Self {
         Self {
@@ -1446,10 +1458,12 @@ impl HODModel {
 
         model.auto_repair_assembly_names();
         model.clean_hierarchy();
+        normalize_collision_meshes(&mut model);
 
         // Upgrade V1 to V2 in memory
         if !model.is_v2 {
             model.upgrade_v1_to_v2();
+            normalize_collision_meshes(&mut model);
         }
 
         Ok(model)
@@ -3706,34 +3720,7 @@ pub fn validate_marker_parents(model: &mut HODModel) {
 }
 
 pub fn generate_collision_mesh(model: &mut HODModel) {
-    if model.collision_meshes.is_empty() {
-        model.collision_meshes.push(crate::hod::HODCollisionMesh {
-            name: "CollisionMesh".to_string(),
-            min_extents: crate::hod::Vector3 {
-                x: -10.0,
-                y: -10.0,
-                z: -10.0,
-            },
-            max_extents: crate::hod::Vector3 {
-                x: 10.0,
-                y: 10.0,
-                z: 10.0,
-            },
-            center: crate::hod::Vector3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            radius: 10.0,
-            mesh: crate::hod::HODMesh {
-                name: "CollisionMesh".to_string(),
-                parent_name: String::new(),
-                lod: 0,
-                has_mult_tags: false,
-                parts: Vec::new(),
-            },
-        });
-    }
+    normalize_collision_meshes(model);
 
     // Always generate box vertices for collision meshes that have extents but no vertices
     for cm in &mut model.collision_meshes {

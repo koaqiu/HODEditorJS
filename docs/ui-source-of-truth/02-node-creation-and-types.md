@@ -42,7 +42,7 @@ NavLight creation creates nav light data and an associated position joint when r
 
 Dockpath creation adds a dockpath with dockpoint data according to current `handleAddNode` behavior.
 
-Collision creation adds a collision hull entry associated to the current parent or source mesh context.
+Collision creation creates/restores the single engine-defined COL entry. The user does not choose a name or parent: the editor always creates it as `Root`, blocks creation when a collision already exists, and keeps save/import normalization aligned with that rule.
 
 Engine nozzle creation adds an engine burn/nozzle node and its associated joint data according to current code.
 
@@ -67,4 +67,4 @@ UI Tree should show those structures as a main Assembly node (not specifically a
 
 Names are significant because many collections reference joints by string name. Rename and delete behavior must maintain or intentionally update these cross-references.
 
-Duplicate names are strictly restricted across the entire tree during node creation and renaming. The UI enforces uniqueness for all newly created Nodes or Meshes to prevent internal naming collisions.
+Duplicate names are strictly restricted across the entire tree during node creation and renaming. The UI enforces uniqueness for all newly created Nodes or Meshes to prevent internal naming collisions. The single collision node is the exception: it must be named `Root` even though the root joint also uses that display name, because the node type disambiguates it.

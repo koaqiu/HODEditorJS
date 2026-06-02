@@ -887,3 +887,37 @@ Automated checks:
 3. Opened HOD 1.0 `ter_leviathan.hod` from uncompressed_bigs in editor:
     - DXT5 `leviathan DIFF` loaded correctly: [x] PASS
     - Textures orientation: [x] PASS
+
+---
+
+SHA: `pending`
+Timestamp: `01/06/2026 21:41`
+Test hod: `ter_centaur`, `ter_fenris`, DAE import
+
+**Goal**: Verify singleton COL node behavior: only one COL may exist, it must display/save as `Root`, users cannot rename it, and deleting it persists through save/reopen.
+
+Automated checks:
+
+1. Parser/build verification:
+    - `cargo check --lib`: [x] PASS - 37 pre-existing warnings only.
+    - `cargo run --bin verify_lossless`: [x] PASS - structural re-parse counts match; expected size differences remain from recompression.
+    - `npm run build`: [x] PASS - existing Vite large chunk warning only.
+
+Manual COL Retest:
+
+1. Open HOD 2.0 `ter_centaur_2.0_original.hod` in editor:
+    - Exactly one COL node appears: [ ] PENDING
+    - COL node displays as `Root`: [ ] PENDING
+    - Rename is not available for COL: [ ] PENDING
+    - Delete removes the COL node: [ ] PENDING
+    - Save/reopen after delete does not synthesize a new COL: [ ] PENDING
+2. Open HOD 1.0 `ter_fenris_1.0_original.hod` in editor:
+    - If a collision is parsed, exactly one COL node appears: [ ] PENDING
+    - Parsed COL node displays as `Root`: [ ] PENDING
+    - Save/reopen preserves singleton behavior: [ ] PENDING
+3. Import a DAE with multiple `COL[...]` geometries:
+    - Only one COL node is imported: [ ] PENDING
+    - Imported COL node displays as `Root`: [ ] PENDING
+4. Add Node modal:
+    - Collision creation uses fixed `Root` name with no editable name field: [ ] PENDING
+    - Adding a second collision is blocked until the existing COL is deleted: [ ] PENDING

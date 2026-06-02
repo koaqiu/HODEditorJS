@@ -313,12 +313,41 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
             }
         });
         autoName = `${prefix}${maxNum + 1}`;
+    } else if (addNodeType === "collision") {
+        autoName = "Root";
     } else if (!autoName) {
         return; // Empty name not allowed for non-auto nodes
     }
 
     const name = autoName;
     const parent = newNodeParent === "Root" ? "Root" : newNodeParent;
+
+    if (addNodeType === "collision") {
+      if (model.collision_meshes.length > 0) {
+        window.alert("Only one COL node is allowed per HOD. Delete the existing COL node before adding a new one.");
+        return;
+      }
+
+      const newCol = {
+        name: "Root",
+        min_extents: { x: -5, y: -5, z: -5 },
+        max_extents: { x: 5, y: 5, z: 5 },
+        center: { x: 0, y: 0, z: 0 },
+        radius: 5.0,
+        mesh: {
+          name: "CollisionMesh",
+          parent_name: "Root",
+          lod: 0,
+          parts: []
+        }
+      };
+
+      onModelChange?.({ ...model, collision_meshes: [newCol] });
+      invoke("log_event", { level: "INFO", message: "Added new collision mesh: Root" }).catch(console.error);
+      setIsAddNodeOpen(false);
+      setNewNodeName("");
+      return;
+    }
 
     
     const checkDuplicate = (n: string) => {
@@ -434,22 +463,6 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
       };
       updatedModel.dockpaths = [...model.dockpaths, newPath];
       invoke("log_event", { level: "INFO", message: `Added new dockpath: ${name} parented under ${parent}` }).catch(console.error);
-    } else if (addNodeType === "collision") {
-      const newCol = {
-        name,
-        min_extents: { x: -5, y: -5, z: -5 },
-        max_extents: { x: 5, y: 5, z: 5 },
-        center: { x: 0, y: 0, z: 0 },
-        radius: 5.0,
-        mesh: {
-          name,
-          parent_name: parent,
-          lod: 0,
-          parts: []
-        }
-      };
-      updatedModel.collision_meshes = [...model.collision_meshes, newCol];
-      invoke("log_event", { level: "INFO", message: `Added new collision mesh: ${name} parented under ${parent}` }).catch(console.error);
     } else if (addNodeType === "weapon_template") {
       const base = name.startsWith("Weapon_") || name.startsWith("weapon_") ? name : `Weapon_${name}`;
       const posName = `${base}_Position`;
@@ -906,6 +919,10 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
 
   const handleRenameNode = (oldName: string, type: string) => {
     if (!model) return;
+    if (type === "collision") {
+      alert("COL nodes are engine-defined and must remain named Root.");
+      return;
+    }
     if (oldName === "Root") {
       alert("The 'Root' node cannot be renamed as it is required by the engine.");
       return;
@@ -3259,7 +3276,18 @@ const handleDeleteNode = (name: string, type: string) => {
               </div>
 
               {/* Node Name */}
-              {!["engine_nozzle", "repair_point_template", "capture_point_template", "salvage_point_template"].includes(addNodeType) && (
+              {addNodeType === "collision" && (
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontStyle: "italic", marginBottom: "8px" }}>
+                  COL nodes are engine-defined: only one may exist, and it is always named Root.
+                </div>
+              )}
+              {![
+                "engine_nozzle",
+                "repair_point_template",
+                "capture_point_template",
+                "salvage_point_template",
+                "collision"
+              ].includes(addNodeType) && (
                 <div>
                   <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>
                     {addNodeType === "weapon_template" || addNodeType === "turret_template" ? "Base Weapon Name" : "Node Name"}
@@ -3361,7 +3389,7 @@ const handleDeleteNode = (name: string, type: string) => {
               <button
                 className="primary"
                 onClick={handleAddNode}
-                disabled={!newNodeName.trim()}
+                disabled={addNodeType !== "collision" && !newNodeName.trim()}
                 style={{
                   padding: "8px 16px",
                   fontSize: "12px",
@@ -3370,8 +3398,8 @@ const handleDeleteNode = (name: string, type: string) => {
                   color: "#000",
                   fontWeight: "700",
                   border: "none",
-                  cursor: newNodeName.trim() ? "pointer" : "not-allowed",
-                  opacity: newNodeName.trim() ? 1 : 0.5
+                  cursor: (addNodeType === "collision" || newNodeName.trim()) ? "pointer" : "not-allowed",
+                  opacity: (addNodeType === "collision" || newNodeName.trim()) ? 1 : 0.5
                 }}
               >
                 Add Node
@@ -3520,16 +3548,18 @@ const handleDeleteNode = (name: string, type: string) => {
               flexDirection: 'column'
             }}
           >
-            <div 
-              className="list-item"
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}
-              onClick={() => {
-                 handleRenameNode(contextMenu.name, contextMenu.type);
-                 setContextMenu(null);
-              }}
-            >
-              ✏️ Rename
-            </div>
+            {contextMenu.type !== "collision" && (
+              <div 
+                className="list-item"
+                style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}
+                onClick={() => {
+                   handleRenameNode(contextMenu.name, contextMenu.type);
+                   setContextMenu(null);
+                }}
+              >
+                ✏️ Rename
+              </div>
+            )}
             {isNodeDeletable(contextMenu.name, contextMenu.type) && (
               <div 
                 className="list-item"

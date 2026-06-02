@@ -288,11 +288,10 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
                 // Handle collision meshes: COL[...] geometries become
                 // HODCollisionMesh entries instead of regular visible meshes.
                 if mesh_target_name.starts_with("COL[") {
-                    if let Some(end) = mesh_target_name.find("]") {
-                        let col_name = mesh_target_name[4..end].to_string();
+                    if mesh_target_name.find("]").is_some() && model.collision_meshes.is_empty() {
                         // Collect all parts from this geometry
                         let mut col_parts = Vec::new();
-                        for triangles in mesh
+                        for _triangles in mesh
                             .children()
                             .filter(|n| n.has_tag_name("triangles") || n.has_tag_name("polylist"))
                         {
@@ -307,13 +306,13 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
                         // The actual vertex data will be generated from extents
                         // when saving, matching HODOR's behavior.
                         model.collision_meshes.push(HODCollisionMesh {
-                            name: col_name,
+                            name: "Root".to_string(),
                             min_extents: Vector3 { x: -10.0, y: -10.0, z: -10.0 },
                             max_extents: Vector3 { x: 10.0, y: 10.0, z: 10.0 },
                             center: Vector3 { x: 0.0, y: 0.0, z: 0.0 },
                             radius: 17.32,
                             mesh: HODMesh {
-                                name: "Root".to_string(),
+                                name: "CollisionMesh".to_string(),
                                 parent_name: "Root".to_string(),
                                 lod: 0,
                                 has_mult_tags: false,
@@ -398,6 +397,7 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
 
     // Parse animations from library_animations
     parse_animations(&doc, &mut model);
+    normalize_collision_meshes(&mut model);
 
     Ok(model)
 }

@@ -547,18 +547,18 @@ function App() {
         }
       } else if (targetType === "collision") {
         // Convert to collision:
-        if (originalJoint) {
+        if (originalJoint && updatedCollisions.length === 0) {
           const m = originalJoint.local_transform.m;
           const pos = { x: m[3][0], y: m[3][1], z: m[3][2] };
           
           updatedCollisions.push({
-            name: jointName,
+            name: "Root",
             min_extents: { x: -3, y: -3, z: -3 },
             max_extents: { x: 3, y: 3, z: 3 },
             center: pos,
             radius: 3.0,
             mesh: {
-              name: jointName,
+              name: "CollisionMesh",
               parent_name: "Root",
               lod: 0,
               parts: []

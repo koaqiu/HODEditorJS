@@ -667,6 +667,7 @@ fn import_dae_file(path: String) -> Result<hwr_hod_parser::hod::HODModel, String
     model.auto_repair_assembly_names();
     model.clean_hierarchy();
     model.deduplicate_names();
+    hwr_hod_parser::hod::normalize_collision_meshes(&mut model);
     model.auto_assign_and_resize_textures();
 
     write_log(

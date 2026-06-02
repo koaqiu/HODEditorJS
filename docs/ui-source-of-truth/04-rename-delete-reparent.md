@@ -48,6 +48,8 @@ Current cascade removes:
 
 Joint delete must not reparent child nodes to the deleted node's parent.
 
+Deleting a collision row removes the single `model.collision_meshes[]` entry. Save/import code must not synthesize a replacement collision after deletion.
+
 ## Weapon Group Delete
 
 Deleting a weapon group collects all group joints, then expands each group joint into its full subtree. It removes the same attachment types as ordinary joint subtree deletion.
@@ -68,7 +70,9 @@ Joint rename updates child joint parents and attached mesh/marker/engine parent 
 
 Weapon group rename batch-renames assembly joints by replacing the group prefix and updates affected parent references, mesh parents, and marker parents.
 
-Special wrapped display names such as `NAVL[...]`, `MARK[...]`, `BURN[...]`, `MULT[...]`, `COL[...]`, `GLOW[...]`, and `SHAP[...]` are normalized before prompting and restored after input.
+Special wrapped display names such as `NAVL[...]`, `MARK[...]`, `BURN[...]`, `MULT[...]`, `GLOW[...]`, and `SHAP[...]` are normalized before prompting and restored after input.
+
+Collision rows are not rename targets. The context menu hides Rename for `collision`, and defensive rename handling must reject it because COL nodes are engine-defined and must remain named `Root`.
 
 ## Reparent
 
