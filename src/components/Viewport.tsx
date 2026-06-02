@@ -2263,7 +2263,11 @@ export const Viewport: React.FC<ViewportProps> = ({
   }, [selectedNode, model]);
 
   return (
-    <div className="viewport-container" ref={mountRef}>
+    <div className="viewport-container" style={{ position: "relative" }}>
+      {/* ── Three.js exclusive container ── */}
+      <div ref={mountRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+      
+      {/* ── React UI Elements ── */}
       <div
         style={{
           position: "absolute",
