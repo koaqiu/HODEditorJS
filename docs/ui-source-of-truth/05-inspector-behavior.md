@@ -60,4 +60,6 @@ Engine Glow LOD rows may expose per-LOD visibility toggles that write through th
 
 ## Materials And Textures
 
-Material and texture editing lives in Inspector and related hierarchy material import/export controls. Do not duplicate material state outside model updates.
+Material and texture editing lives in Inspector and the Hierarchy tree's Materials tab. Do not duplicate material state outside model updates. 
+The Hierarchy tree's Materials tab provides a comprehensive list of all loaded materials and textures.
+Texture items in this list have a right-click context menu that can toggle the `legacy_storage_y_flipped` property, which directly controls the WebGL `flipY` parameter in the Viewport for accurate in-game orientation previews.

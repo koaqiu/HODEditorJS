@@ -54,7 +54,11 @@ Root is not draggable.
 
 ## Context Menu
 
-Right-click opens a portal-based context menu at cursor coordinates. The menu contains Rename and, when allowed, Delete.
+Right-click opens a portal-based context menu at cursor coordinates. The menu contains Rename and, when allowed, Delete for standard tree nodes.
+
+For the Textures list in the Materials tab, the context menu provides options to:
+- Toggle Y-Flip (inverts `legacy_storage_y_flipped` and instantly updates the WebGL `flipY` state for preview).
+- Remove Texture.
 
 Weapon assembly subnodes must not open the right-click menu. This is enforced by the shared protected-subnode guard in `HierarchyTree.tsx`.
 
