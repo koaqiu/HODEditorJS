@@ -3908,7 +3908,7 @@ pub fn compose_transform_matrix(pos: Vector3, rot: Vector3, scale: Vector3) -> M
     Matrix4 { m: final_rot }
 }
 
-fn decompose_matrix(matrix: Matrix4) -> (Vector3, Vector3, Vector3) {
+pub fn decompose_matrix(matrix: Matrix4) -> (Vector3, Vector3, Vector3) {
     let m = matrix.m;
     let pos = Vector3 {
         x: m[3][0],
@@ -4010,15 +4010,23 @@ fn parse_joints(chunk: &IffChunk) -> Result<Vec<HODJoint>, String> {
                 .read_f32::<LittleEndian>()
                 .map_err(|e| e.to_string())?;
 
-            let sx = reader
+            let mut sx = reader
                 .read_f32::<LittleEndian>()
                 .map_err(|e| e.to_string())?;
-            let sy = reader
+            let mut sy = reader
                 .read_f32::<LittleEndian>()
                 .map_err(|e| e.to_string())?;
-            let sz = reader
+            let mut sz = reader
                 .read_f32::<LittleEndian>()
                 .map_err(|e| e.to_string())?;
+
+            // Retroactive fix: Any existing HOD 2.0 file corrupted by our previous (1.0, 1.0, 1.0) fallback bug
+            // will be repaired upon load so it saves correctly with zeroed gimbal limits.
+            if (sx - 1.0).abs() < 0.001 && (sy - 1.0).abs() < 0.001 && (sz - 1.0).abs() < 0.001 {
+                sx = 0.0;
+                sy = 0.0;
+                sz = 0.0;
+            }
 
             let local_transform = compose_transform_matrix(
                 Vector3 {

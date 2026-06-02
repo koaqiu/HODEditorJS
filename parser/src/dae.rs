@@ -389,9 +389,9 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
                     [0.0, 0.0, 0.0, 1.0],
                 ],
             },
-            position: None,
-            rotation: None,
-            scale: None,
+            position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+            rotation: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+            scale: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
         });
     }
 
@@ -524,13 +524,14 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
     }
 
     if is_joint {
+        let (pos, rot, _) = decompose_matrix(transform.clone());
         model.joints.push(HODJoint {
             name: name.clone(),
             parent_name: p_name.clone(),
             local_transform: transform.clone(),
-            position: None,
-            rotation: None,
-            scale: None,
+            position: Some(pos),
+            rotation: Some(rot),
+            scale: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
         });
     } else if is_mark {
         model.markers.push(HODMarker {
@@ -585,13 +586,14 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
         // Also create a joint so the frontend can parent the navlight
         // in the hierarchy tree. Without this, rootNavLights filter
         // places it at the root level since no matching joint exists.
+        let (pos, rot, _) = decompose_matrix(transform.clone());
         model.joints.push(HODJoint {
             name: name.clone(),
             parent_name: p_name.clone(),
             local_transform: transform.clone(),
-            position: None,
-            rotation: None,
-            scale: None,
+            position: Some(pos),
+            rotation: Some(rot),
+            scale: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
         });
     } else if is_burn {
         // Parse Flame children to extract burn vertices
@@ -651,13 +653,14 @@ fn parse_scene_node(node: Node, parent_name: Option<&str>, model: &mut HODModel)
             && !name.starts_with("HOLD_")
             && !name.starts_with("ANIM[")
         {
+            let (pos, rot, _) = decompose_matrix(transform.clone());
             model.joints.push(HODJoint {
                 name: name.clone(),
                 parent_name: p_name.clone(),
                 local_transform: transform.clone(),
-                position: None,
-                rotation: None,
-                scale: None,
+                position: Some(pos),
+                rotation: Some(rot),
+                scale: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
             });
         }
     }

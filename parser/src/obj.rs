@@ -49,9 +49,9 @@ pub fn parse_obj(obj_path: &Path) -> Result<HODModel, String> {
             name: "Root".to_string(),
             parent_name: None,
             local_transform: Matrix4 { m: [[1.0,0.0,0.0,0.0], [0.0,1.0,0.0,0.0], [0.0,0.0,1.0,0.0], [0.0,0.0,0.0,1.0]] },
-            position: None,
-            rotation: None,
-            scale: None,
+            position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+            rotation: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+            scale: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
         }
     ];
 

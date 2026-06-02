@@ -938,7 +938,7 @@ Automated checks:
 Manual COL Context Menu Retest:
 
 1. Open a HOD with a parsed COL node named `Root`:
-    - Right-click COL opens a non-empty context menu: [ ] PENDING
-    - Rename is still hidden for COL: [ ] PENDING
-    - Delete option is visible for COL: [ ] PENDING
-    - Delete removes the COL node: [ ] PENDING
+    - Right-click COL opens a non-empty context menu: [x] PASS
+    - Rename is still hidden for COL: [x] PASS
+    - Delete option is visible for COL: [x] PASS
+    - Delete removes the COL node: [x] PASS
