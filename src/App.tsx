@@ -963,7 +963,7 @@ function App() {
             <div style={{ position: "relative", width: "100%", height: "100%", flex: 1, minHeight: 0 }}>
               {keeperTxtPaths.length === 0 && (
                 <div
-                  onClick={() => setIsSettingsOpen(true)}
+                  onClick={() => setIsSettingsModalOpen(true)}
                   style={{
                     position: "absolute",
                     top: "12px",
@@ -1187,7 +1187,7 @@ function App() {
                     Configure your game data directories to automatically render .TGA textures and high-fidelity shader materials.
                   </div>
                   <button 
-                    onClick={() => setIsSettingsOpen(true)}
+                    onClick={() => setIsSettingsModalOpen(true)}
                     style={{
                       marginTop: "4px",
                       height: "32px",
