@@ -1,0 +1,23 @@
+Agent, here is your brief to continue the work:
+
+**Context:**
+The previous agent successfully fixed the HOD 1.0 to 2.0 conversion scaling and orientation bugs, and HOD 1.0 conversions are now 100% passing! 
+
+However, during testing, the **HOD 2.0 to 2.0 saving failed on material/texture assignments**. 
+
+**The Root Cause:**
+To allow the React UI's material dropdown edits to apply, the previous agent removed the preservation of raw `STAT` chunks and forced `generate_v2_from_model` to dynamically regenerate `STAT` chunks using `model.materials`. 
+
+This works perfectly for HOD 1.0, but HOD 2.0 `STAT` chunks contain a large block of binary shader parameters (glossiness, specular colors, team colors, etc.) immediately *after* the texture maps array. If you look at `parse_stat_material` in `parser/src/hod.rs`, you will see it actually reads these remaining bytes into a `parameters` vector but then throws them away! 
+
+Because the `HODMaterial` struct does not store these parameters, `write_stat_texture_params` builds truncated `STAT` chunks. When the HWRM engine loads these truncated chunks, the shader uniforms are misaligned or missing, causing it to assign wrong textures or corrupt the rendering.
+
+**Your Task:**
+1. **Read Testing Rules:** Please read `testing/manual_tests.md` to familiarize yourself with the testing workflow and historical test snapshots we use to log our progress. The user will be heavily relying on these tests to verify your code.
+2. **Rust Backend:** Modify the `HODMaterial` struct in `parser/src/hod.rs` to include `pub parameters: Vec<u8>`. Update `parse_stat_material` to store the read bytes into this field, and update `write_stat_texture_params` to write `mat.parameters` back out at the end of the chunk.
+3. **TypeScript Frontend:** Update the `HODMaterial` interface in `src/App.tsx` (and anywhere else it is defined) to include `parameters: number[]` so that when the UI serializes the model back to Rust during a save, it doesn't strip the parameter payload.
+4. **Validation:** Ensure the UI correctly passes the parameters back and forth. You shouldn't need to modify how the UI interacts with materials, just ensure the binary blobs survive the JSON roundtrip.
+5. Run `npm run build` and `cargo check --lib` to ensure your changes compile correctly.
+6. **Logging:** Add a new test snapshot at the bottom of `testing/manual_tests.md` when you finish so the user can test your fix!
+
+Good luck!

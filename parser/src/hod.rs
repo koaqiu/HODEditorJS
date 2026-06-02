@@ -1842,24 +1842,27 @@ impl HODModel {
                     if tn.ends_with(".png") {
                         tn.truncate(tn.len() - 4);
                     }
+                    if tn.ends_with(".dds") {
+                        tn.truncate(tn.len() - 4);
+                    }
 
-                    if s_name.contains("GLOW") && tn.ends_with("_glow") {
+                    if s_name.contains("GLOW") && (tn.contains("_glow") || tn.contains("glow")) {
                         return true;
                     }
-                    if s_name.contains("TEAM") && tn.ends_with("_team") {
+                    if s_name.contains("TEAM") && (tn.contains("_team") || tn.contains("team")) {
                         return true;
                     }
-                    if s_name.contains("NORM") && tn.ends_with("_norm") {
+                    if s_name.contains("NORM") && (tn.contains("_norm") || tn.contains("norm")) {
                         return true;
                     }
-                    if s_name.contains("SPEC") && tn.ends_with("_spec") {
+                    if s_name.contains("SPEC") && (tn.contains("_spec") || tn.contains("spec")) {
                         return true;
                     }
                     if s_name.contains("DIFF")
-                        && !tn.ends_with("_glow")
-                        && !tn.ends_with("_team")
-                        && !tn.ends_with("_norm")
-                        && !tn.ends_with("_spec")
+                        && !tn.contains("glow")
+                        && !tn.contains("team")
+                        && !tn.contains("norm")
+                        && !tn.contains("spec")
                     {
                         return true;
                     }
@@ -6277,6 +6280,25 @@ pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec
                     &mut new_face_pool,
                     "",
                 )?;
+                
+                chunk.children.retain(|c| c.id != "STAT" && c.id != "MATT");
+                
+                for mat in &updated_model.materials {
+                    let mut stat_buf = Vec::new();
+                    let mut stat_cursor = Cursor::new(&mut stat_buf);
+                    
+                    write_len_string(&mut stat_cursor, &mat.name).unwrap();
+                    write_len_string(&mut stat_cursor, &mat.shader_name).unwrap();
+                    write_stat_texture_params(&mut stat_cursor, mat, &updated_model.textures).unwrap();
+                    
+                    chunk.children.push(IffChunk {
+                        id: "STAT".to_string(),
+                        chunk_type: ChunkType::Normal,
+                        version: 1001,
+                        data: stat_buf,
+                        children: Vec::new(),
+                    });
+                }
             }
         }
 
