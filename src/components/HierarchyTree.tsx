@@ -3008,7 +3008,7 @@ const handleDeleteNode = (name: string, type: string) => {
             ) : (
               <div style={{ padding: "30px 20px", color: "var(--text-muted)", fontSize: "13px", textAlign: "center", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
                 <Activity size={24} style={{ color: "var(--border-color)", opacity: 0.5 }} />
-                <span>No animations loaded. Use the bottom panel's "New Anim" to create animation sequences and add tracks!</span>
+                <span>No animations loaded. Import a glTF file (bottom animation toolbar) or click on "New Anim" to create animation sequences and add tracks!</span>
               </div>
             )
           ) : (

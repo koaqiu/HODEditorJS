@@ -348,6 +348,12 @@ This feature is under active development. Complex DAE files with advanced featur
 
 ## Installation & Running
 
+### Compiled Binaries
+
+I have pre-compiles binaries for .deb, .rpm and .appimage for anyone to instantly run (linux).
+
+Windows users might have to install with the following instructions below.
+
 ### Prerequisites
 - [Node.js](https://nodejs.org/) v18.x or newer
 - [Rust & Cargo](https://rustup.rs/) v1.75.0 or newer
