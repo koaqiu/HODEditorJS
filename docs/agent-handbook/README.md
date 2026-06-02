@@ -1,6 +1,6 @@
 # OpenCode Agent Handbook
 
-Welcome to the **HODEditorJS** codebase! This repository is built to parse, render, and edit Homeworld Remastered HOD 1.0 and 2.0 binary ship models.
+Welcome to the **HODEditorJS** codebase! This repository is built to parse, render, and edit Homeworld Remastered HOD 1.3 and 2.0 binary ship models.
 
 This guide provides the required context for any OpenCode agent to successfully work on this project without breaking existing features or repeating past mistakes.
 
@@ -23,9 +23,9 @@ This is a **Tauri** desktop application with three major structural boundaries:
 
 **Every save operation MUST generate a fresh HOD 2.0 file from the in-memory model. Never patch the original file.**
 
-- When a HOD 1.0, HOD 2.0, or DAE file is loaded, it is parsed into `HODModel` and the original file bytes are discarded.
+- When a HOD 1.3, HOD 2.0, or DAE file is loaded, it is parsed into `HODModel` and the original file bytes are discarded.
 - On save, `generate_v2_from_model([], &model)` is called to create a brand new HOD 2.0 binary from the model data.
-- **All output files are HOD 2.0 format**, regardless of input format. This app modernizes HOD 1.0 files.
+- **All output files are HOD 2.0 format**, regardless of input format. This app modernizes HOD 1.3 files.
 - The `save_edits` function and `original_needs_full_v2_regeneration` logic are DEPRECATED. They only exist as a fallback for edge cases and should not be relied upon.
 - Unparsed chunks from the original file (like `KDOP`, `COLD`, `SCAR`, `INFO`) must be preserved in `HODModel` as raw bytes and written back to the output during generation.
 
@@ -59,7 +59,7 @@ cargo run --bin verify_lossless
 If `verify_lossless` fails to cleanly round-trip the mesh, joint, or marker counts on the test files (`pebble_0.hod`, `ter_elysium.hod`, `ter_zephyrus.hod`), your changes are destructive and must be reverted/fixed immediately.
 
 ### Useful Paths for Testing
-- **HOD 1.0 files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/`
+- **HOD 1.3 files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/`
 - **HOD 2.0 files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/`
 - **DAE files (FS mod):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/current_project_processing/ship_converted/`
 - **HOD 2.0 files (Vanilla game):** `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/ship/`

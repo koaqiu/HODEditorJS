@@ -32,3 +32,6 @@ parser/target/
 .opencode/
 opencode.json
 agents.md
+
+# Testing artifacts (not tracked)
+testing/

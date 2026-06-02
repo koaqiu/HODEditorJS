@@ -19,7 +19,7 @@ This directory contains the **current**, active specifications for the `.HOD` fo
 - [HOD 2.0 Reverse Engineering Knowledge Base](hod2-reverse-engineering/hod2_reverse_engineering_knowledge_base.md) - The foundational reverse-engineering knowledge (Flat file structure, Endianness inconsistencies, MULT padding). *(Migrated from legacy `agents_info/` directory).*
 - [HOD 2.0 Creation Specification](hod2-reverse-engineering/hod2-creation-specification.md) - How we construct HOD 2.0 files.
 - [POOL Chunk Spec](hod2-reverse-engineering/pool-chunk-specification.md) - How vertices, faces, and materials are packed.
-- [HOD 1.0 vs HOD 2.0 Comparison](hod2-reverse-engineering/hod1-vs-hod2-comparison.md) - Key differences between legacy and modern formats.
+- [HOD 1.3 vs HOD 2.0 Comparison](hod2-reverse-engineering/hod1-vs-hod2-comparison.md) - Key differences between legacy and modern formats.
 - [DAEnerys Pipeline Spec](hod2-reverse-engineering/daenerys-obj-to-dae-pipeline.md) - How DAEnerys generates `.DAE` nodes (`ROOT_LOD[0]`, `JNT`, etc.) and how our parser reads them.
 - [Testing Guide](hod2-reverse-engineering/testing-guide.md) - How to run the `cargo run --bin` tests.
 

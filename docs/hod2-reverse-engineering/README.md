@@ -6,7 +6,7 @@ This directory contains all documentation and analysis for reverse engineering t
 
 1. **Lossless editing** of existing HOD 2.0 files
 2. **Creation** of new HOD 2.0 files from scratch
-3. **Conversion** from HOD 1.0 to HOD 2.0
+3. **Conversion** from HOD 1.3 to HOD 2.0
 4. **Import** of DAE files to HOD 2.0
 
 ## Directory Structure

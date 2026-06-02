@@ -2,7 +2,7 @@
 
 A modern, cross-platform visual editor for Homeworld Remastered (HWRM) `.hod` ship skeleton and mesh files. Built with **Tauri**, **React**, **TypeScript**, **Three.js**, and a custom standalone **Rust parser (`hwr_hod_parser`)**.
 
-This tool lets you inspect, edit, and save `.hod` files with a visual interface. It supports migrating legacy **HOD 1.0** files to **HOD 2.0**, building weapon assemblies, editing collision hulls, managing materials and textures, and creating animations.
+This tool lets you inspect, edit, and save `.hod` files with a visual interface. It supports migrating legacy **HOD 1.3** files to **HOD 2.0**, building weapon assemblies, editing collision hulls, managing materials and textures, and creating animations.
 
 ![Main Editor](screenshots/Main_Editor.png)
 
@@ -85,7 +85,7 @@ This tool lets you inspect, edit, and save `.hod` files with a visual interface.
 - Self-healing integrity engine: real-time diagnostics with one-click structure repair
 
 **Migration Assistant**
-- HOD 1.0 to 2.0 schema migration with 7 reclassification targets (Standard Joint, Marker, Weapon Assembly, Collision Hull, NavLight, Engine Burn, Engine Glow)
+- HOD 1.3 to 2.0 schema migration with 7 reclassification targets (Standard Joint, Marker, Weapon Assembly, Collision Hull, NavLight, Engine Burn, Engine Glow)
 - Coordinate cloning from any other joint in the model
 
 **Settings**
@@ -334,7 +334,7 @@ This feature is under active development. Complex DAE files with advanced featur
 │                  STANDALONE PARSER                     │
 │                hwr_hod_parser (Rust)                   │
 │  - MS XPress 31-bit LZ77 Decompressor/Compressor       │
-│  - HOD 1.0 & 2.0 IFF Binary Reader/Writer              │
+│  - HOD 1.3 & 2.0 IFF Binary Reader/Writer              │
 │  - Absolute Euler & Float Preservation                 │
 │  - DAE/Collada XML Parser                              │
 └────────────────────────────────────────────────────────┘
