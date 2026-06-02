@@ -73,36 +73,7 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
     window.addEventListener("mouseup", onUp);
   };
 
-  // ─── Animation CRUD ───────────────────────────────────────────────────────
-  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
-  const [newAnimName, setNewAnimName] = React.useState("");
-  const [newAnimDuration, setNewAnimDuration] = React.useState(4.0);
 
-  const handleCreateAnimation = () => {
-    if (!model || !newAnimName.trim()) return;
-    const newAnim: HODAnimation = {
-      name: newAnimName.trim(),
-      duration: newAnimDuration,
-      tracks: [],
-    };
-    const updatedAnims = [...(model.animations ?? []), newAnim];
-    onModelChange?.({ ...model, animations: updatedAnims });
-    setSelectedAnimIdx(updatedAnims.length - 1);
-    setIsCreateOpen(false);
-    setNewAnimName("");
-    setNewAnimDuration(4.0);
-  };
-
-  const handleDeleteAnimation = () => {
-    if (!model || !activeAnim) return;
-    const confirmed = window.confirm(
-      `Delete animation "${activeAnim.name}"? This cannot be undone.`
-    );
-    if (!confirmed) return;
-    const updatedAnims = (model.animations ?? []).filter((_, i) => i !== selectedAnimIdx);
-    onModelChange?.({ ...model, animations: updatedAnims });
-    setSelectedAnimIdx(Math.max(0, selectedAnimIdx - 1));
-  };
 
   const recordKeyframeForJoint = useCallback((jointName: string, time: number) => {
     if (!model || !activeAnim) return;
@@ -552,25 +523,7 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
 
           {/* ─ Edit cluster ─ */}
           <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-            {/* New Animation */}
-            <button
-              title="Create new animation"
-              onClick={() => setIsCreateOpen(true)}
-              style={btnStyle("#00e676", "rgba(0,230,118,0.1)", "rgba(0,230,118,0.3)")}
-            >
-              ✚ New Anim
-            </button>
 
-            {/* Delete Animation */}
-            {hasAnims && (
-              <button
-                title={`Delete "${activeAnim?.name}"`}
-                onClick={handleDeleteAnimation}
-                style={btnStyle("#ff4040", "rgba(255,64,64,0.1)", "rgba(255,64,64,0.3)")}
-              >
-                🗑
-              </button>
-            )}
 
             {/* Add Track */}
             {hasAnims && (
@@ -845,80 +798,6 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
         )}
       </div>
 
-      {/* ── Create Animation Modal ── */}
-      {isCreateOpen && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(3,8,16,0.75)", backdropFilter: "blur(6px)",
-            display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: "rgba(10,20,35,0.97)",
-              border: "1px solid rgba(22,160,255,0.35)",
-              borderRadius: "12px", width: "380px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
-              display: "flex", flexDirection: "column", overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                background: "linear-gradient(135deg, rgba(22,160,255,0.15), transparent)",
-                padding: "14px 18px",
-                borderBottom: "1px solid var(--border-color)",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}
-            >
-              <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--accent-cyan)" }}>
-                Create New Animation
-              </span>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "16px", cursor: "pointer" }}
-              >✕</button>
-            </div>
-            <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div>
-                <label style={labelStyle}>Animation Name</label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newAnimName}
-                  onChange={(e) => setNewAnimName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateAnimation()}
-                  placeholder="e.g., Open_Bay"
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Duration (seconds)</label>
-                <input
-                  type="number"
-                  step="0.1" min="0.1"
-                  value={newAnimDuration}
-                  onChange={(e) => setNewAnimDuration(parseFloat(e.target.value) || 1.0)}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <div
-              style={{
-                padding: "12px 18px",
-                borderTop: "1px solid var(--border-color)",
-                display: "flex", justifyContent: "flex-end", gap: "8px",
-                background: "rgba(5,10,18,0.5)",
-              }}
-            >
-              <button onClick={() => setIsCreateOpen(false)} style={cancelBtnStyle}>Cancel</button>
-              <button onClick={handleCreateAnimation} disabled={!newAnimName.trim()} style={confirmBtnStyle}>
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {contextMenu && (
         <div
@@ -1155,45 +1034,3 @@ const btnStyle = (color: string, bg: string, border: string): React.CSSPropertie
   lineHeight: "16px",
   transition: "all 0.15s",
 });
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: "10px",
-  fontWeight: "600",
-  color: "var(--text-muted)",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  marginBottom: "5px",
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  height: "34px",
-  background: "#050a12",
-  border: "1px solid var(--border-color)",
-  color: "#fff",
-  borderRadius: "4px",
-  padding: "0 10px",
-  fontSize: "13px",
-};
-
-const cancelBtnStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid var(--border-color)",
-  color: "#ccc",
-  borderRadius: "4px",
-  padding: "6px 14px",
-  fontSize: "12px",
-  cursor: "pointer",
-};
-
-const confirmBtnStyle: React.CSSProperties = {
-  background: "rgba(22,160,255,0.2)",
-  border: "1px solid rgba(22,160,255,0.5)",
-  color: "var(--accent-cyan)",
-  borderRadius: "4px",
-  padding: "6px 14px",
-  fontSize: "12px",
-  fontWeight: "600",
-  cursor: "pointer",
-};

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { HODModel } from "./Viewport";
+import { HODModel, HODAnimation } from "./Viewport";
 import { Folder, FolderOpen, Tag, ChevronDown, ChevronRight, Search, Box, Eye, EyeOff, Radio, Activity, Shield, Flame, Palette, Crosshair, Plus, Trash2, AlertTriangle, Info , Image, FlipVertical, Download, Upload } from "lucide-react";
 
 interface HierarchyTreeProps {
@@ -131,6 +131,36 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
   const [activeTab, setActiveTab] = useState<"hierarchy" | "materials" | "animations" | "targetboxes">("hierarchy");
   const [selectedBoxIdx, setSelectedBoxIdx] = useState<number | null>(null);
   const [showLuaCode, setShowLuaCode] = useState(false);
+
+  // Animation CRUD
+  const [isCreateAnimOpen, setIsCreateAnimOpen] = useState(false);
+  const [newAnimName, setNewAnimName] = useState("");
+  const [newAnimDuration, setNewAnimDuration] = useState(4.0);
+
+  const handleCreateAnimation = () => {
+    if (!model || !newAnimName.trim()) return;
+    const newAnim: HODAnimation = {
+      name: newAnimName.trim(),
+      duration: newAnimDuration,
+      tracks: [],
+    };
+    const updatedAnims = [...(model.animations ?? []), newAnim];
+    onModelChange?.({ ...model, animations: updatedAnims });
+    setSelectedAnimIdx(updatedAnims.length - 1);
+    setIsCreateAnimOpen(false);
+    setNewAnimName("");
+    setNewAnimDuration(4.0);
+  };
+
+  const handleDeleteAnimation = (idxToDelete: number, animName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!model) return;
+    const confirmed = window.confirm(`Delete animation "${animName}"? This cannot be undone.`);
+    if (!confirmed) return;
+    const updatedAnims = (model.animations ?? []).filter((_, i) => i !== idxToDelete);
+    onModelChange?.({ ...model, animations: updatedAnims });
+    setSelectedAnimIdx(Math.max(0, selectedAnimIdx > idxToDelete ? selectedAnimIdx - 1 : (selectedAnimIdx === idxToDelete ? 0 : selectedAnimIdx)));
+  };
 
   const handleExportNodes = async () => {
     if (!model) return;
@@ -2639,10 +2669,28 @@ const handleDeleteNode = (name: string, type: string) => {
                 <span style={{ color: "var(--accent-cyan)", fontWeight: "600" }}>{model.materials?.length || 0}</span>
                 <span>Materials Allocated</span>
               </div>
+            ) : activeTab === "animations" ? (
+              <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                <div style={{ fontSize: "10px", color: "var(--text-muted)", display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span style={{ color: "var(--accent-cyan)", fontWeight: "600" }}>{model.animations?.length || 0}</span>
+                  <span>Animations Configured</span>
+                </div>
+                <button
+                  onClick={() => setIsCreateAnimOpen(true)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "4px",
+                    background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)",
+                    color: "#00e676", padding: "2px 8px", borderRadius: "4px",
+                    fontSize: "10px", fontWeight: "600", cursor: "pointer"
+                  }}
+                >
+                  <Plus size={10} /> New Anim
+                </button>
+              </div>
             ) : (
               <div style={{ fontSize: "10px", color: "var(--text-muted)", display: "flex", gap: "8px", alignItems: "center" }}>
-                <span style={{ color: "var(--accent-cyan)", fontWeight: "600" }}>{model.animations?.length || 0}</span>
-                <span>Animations Configured</span>
+                <span style={{ color: "var(--accent-cyan)", fontWeight: "600" }}>{targetBoxes?.length || 0}</span>
+                <span>Target Boxes</span>
               </div>
             )}
           </div>
@@ -2893,6 +2941,24 @@ const handleDeleteNode = (name: string, type: string) => {
                         <span style={{ fontSize: "9px", padding: "1px 4px", background: "rgba(255,255,255,0.05)", borderRadius: "3px", color: "var(--text-muted)", marginLeft: "auto", flexShrink: 0 }}>
                           {anim.duration.toFixed(2)}s
                         </span>
+                        <button
+                          onClick={(e) => handleDeleteAnimation(animIdx, anim.name, e)}
+                          title="Delete Animation"
+                          style={{
+                            background: "rgba(255, 64, 64, 0.1)",
+                            border: "1px solid rgba(255, 64, 64, 0.3)",
+                            color: "#ff4040",
+                            borderRadius: "4px",
+                            padding: "2px 6px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                       
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
@@ -3798,6 +3864,84 @@ const handleDeleteNode = (name: string, type: string) => {
           </div>
         </>,
         document.body
+      )}
+
+      {/* ── Create Animation Modal ── */}
+      {isCreateAnimOpen && (
+        <div
+          style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(3,8,16,0.75)", backdropFilter: "blur(6px)",
+            display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(10,20,35,0.97)",
+              border: "1px solid rgba(22,160,255,0.35)",
+              borderRadius: "12px", width: "380px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+              display: "flex", flexDirection: "column", overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(22,160,255,0.15), transparent)",
+                padding: "14px 18px",
+                borderBottom: "1px solid var(--border-color)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}
+            >
+              <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--accent-cyan)" }}>
+                Create New Animation
+              </span>
+              <button
+                onClick={() => setIsCreateAnimOpen(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "16px", cursor: "pointer" }}
+              >✕</button>
+            </div>
+            <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "6px", textTransform: "uppercase" }}>Animation Name</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newAnimName}
+                  onChange={(e) => setNewAnimName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateAnimation()}
+                  placeholder="e.g., Open_Bay"
+                  style={{ width: "100%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "4px", padding: "8px 10px", color: "var(--text-primary)", fontSize: "12px", outline: "none" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "6px", textTransform: "uppercase" }}>Duration (seconds)</label>
+                <input
+                  type="number"
+                  step="0.1" min="0.1"
+                  value={newAnimDuration}
+                  onChange={(e) => setNewAnimDuration(parseFloat(e.target.value) || 0)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateAnimation()}
+                  style={{ width: "100%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "4px", padding: "8px 10px", color: "var(--text-primary)", fontSize: "12px", outline: "none" }}
+                />
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "14px 18px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <button
+                onClick={() => setIsCreateAnimOpen(false)}
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", borderRadius: "6px", padding: "6px 14px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAnimation}
+                style={{ background: "#16a0ff", border: "none", color: "#fff", borderRadius: "6px", padding: "6px 16px", fontSize: "12px", fontWeight: "700", cursor: "pointer", opacity: newAnimName.trim() ? 1 : 0.5 }}
+                disabled={!newAnimName.trim()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

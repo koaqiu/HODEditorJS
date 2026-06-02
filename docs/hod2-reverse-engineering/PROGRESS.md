@@ -703,3 +703,8 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
   1. Converted all conditional `<Fragment>` tags in `HierarchyTree.tsx` (`animations`, `materials`, `textures`) into concrete `<div style={{ display: "flex", flexDirection: "column" }}>` containers. This guarantees React mounts exactly one stable parent DOM node for the list, allowing safe unified unmounting.
   2. Split the `hasAnims ? <select> : <span>` ternary operator in `AnimationDock.tsx` into two strictly separate boolean conditional blocks (`hasAnims && <select>` and `!hasAnims && <span>`), preventing node replacement overlaps on interactive inputs during layout effects.
 * **Next Steps**: Await user verification that the animation deletion bug is completely eliminated.
+
+## 2026-06-02: UX Migration and Final Unmount Crash Resolution
+* **What failed**: The user still reproduced the React unmount crash because the exact location of the trigger (`hasAnims && <button>Delete</button>`) resided deeply nested inside the layout engine toolbar (`AnimationDock.tsx`). 
+* **Decisions made**: Migrated the "Create Animation" and "Delete Animation" logic out of `AnimationDock.tsx` entirely and into the sidebar UI (`HierarchyTree.tsx`). The "New Anim" button is now in the animations header, and the "Delete" trash can icon is rendered individually on each animation list item. 
+* **What was fixed**: This completely decouples the animation list state mutations from the playback timeline toolbar (`AnimationDock.tsx`), rendering the hot-swapping bug structurally impossible since the layout unmounting happens natively inside the sidebar React tree rather than a fast-updating toolbar.
