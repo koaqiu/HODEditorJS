@@ -857,7 +857,8 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     const newMaterial = {
       name,
       shader_name: newMatShader,
-      texture_maps: textureSlots
+      texture_maps: textureSlots,
+      parameters: []
     };
 
     const updatedModel = {

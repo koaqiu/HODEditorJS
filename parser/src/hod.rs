@@ -93,7 +93,9 @@ pub struct HODTexture {
 pub struct HODMaterial {
     pub name: String,
     pub shader_name: String,
-    pub texture_maps: Vec<String>, // list of texture names mapped
+    pub texture_maps: Vec<String>,
+    #[serde(default)]
+    pub parameters: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -2837,10 +2839,15 @@ fn parse_stat_material(chunk: &IffChunk, textures: &[HODTexture]) -> Result<HODM
         }
     }
 
+    let pos = r.position() as usize;
+    let remaining = &chunk.data[pos..];
+    let parameters = remaining.to_vec();
+
     Ok(HODMaterial {
         name: material_name,
         shader_name,
         texture_maps,
+        parameters,
     })
 }
 
@@ -5165,6 +5172,10 @@ fn write_stat_texture_params<W: Write>(
         write_len_string(writer, param_name)?;
     }
 
+    if !mat.parameters.is_empty() {
+        writer.write_all(&mat.parameters).map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -5472,12 +5483,14 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                 name: "default_mat".to_string(),
                 shader_name: "ship".to_string(),
                 texture_maps,
+                parameters: Vec::new(),
             }
         } else {
             HODMaterial {
                 name: "default_mat".to_string(),
                 shader_name: "default_shader".to_string(),
                 texture_maps: Vec::new(),
+                parameters: Vec::new(),
             }
         };
         let mut stat_buf = Vec::new();

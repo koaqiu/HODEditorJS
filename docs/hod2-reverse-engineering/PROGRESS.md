@@ -7,6 +7,7 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ---
 
 ## Current Status
+- ✅ Fixed HOD 2.0 STAT Material Shader Parameter Truncation: `parse_stat_material` now preserves all remaining bytes after texture map indices as `parameters: Vec<u8>` on `HODMaterial`. `write_stat_texture_params` appends these bytes back during serialization. This fixes shader uniform misalignment (glossiness, specular colors, team colors) that caused materials to render incorrectly in-game. All HODMaterial construction sites (DAE, OBJ, auto-gen stubs) and TypeScript interface updated.
 - ✅ Fixed HOD 1.0 → HOD 2.0 Mesh Conversion & Dockpaths: Resolved a critical data loss bug where converting a HOD 1.0 file to HOD 2.0 would drop all dockpaths (`DOCK` chunks) and cause a parser panic (`Failed to fill whole buffer`) upon reloading. The panic occurred because `generate_v2_from_model` was incorrectly bypassing the `generate_pool_data` step for files originally marked as `!is_v2`, resulting in an empty mesh pool while generating full `BMSH` structural chunks. Fixed by enforcing pool generation unconditionally for all HOD 2.0 outputs and porting `DOCK` chunk reconstruction from `save_edits` into `generate_v2_from_model`.
 - ✅ Fixed HOD 1.0 → HOD 2.0 Texture Y-Flip & Editor Texture Flip: Discovered that HOD 2.0 stores its textures in the `POOL` chunk using the DirectX bottom-up convention. HOD 1.0 MAT chunks and TGA imports use a top-down convention. Removed the `legacy_storage_y_flipped` flag from `HODTexture`. The parser now un-flips HOD 2.0 DXT textures on load so they render correctly in the editor UI. On save, `generate_lmip_texture_chunks_and_pool` unconditionally flips the top-down internal pixels back to bottom-up before `POOL` compression. This completely resolves textures looking upside down in the editor (for HOD 2.0) and in-game (when saving HOD 1.0 to HOD 2.0).
 - ✅ Fixed Missing KDOP Collision Mesh in UI: The `KDOP` parser was previously setting the collision mesh parent name to `"KDOP"`, which caused the frontend hierarchy tree to ignore it because it didn't match any valid joint. The parser now binds the `KDOP` collision mesh to the name of the first parsed joint (typically `"Root"`), allowing it to render successfully in the editor viewport.
@@ -153,6 +154,12 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 **Status:** Removed all texture flips (DXT is top-down, not bottom-up), fixed clean_hierarchy rotation bug. Awaiting in-game test results for ter_zephyrus (round 4).
 **Last Updated:** 2026-06-01  
 **Updated By:** OpenCode Agent (texture pipeline correction - DXT is top-down)
+
+### Fixes Applied (2026-06-01 Session 5)
+
+1. **STAT Material Shader Parameter Truncation** (`hod.rs:93, 2840, 5166, 5471, 5477`):
+   - **Root cause**: `parse_stat_material` read texture map indices but discarded all remaining bytes in the STAT chunk. These bytes contain shader parameters (glossiness, specular colors, team colors, etc.) that the HWRM engine reads as shader uniforms. Truncation caused uniform misalignment and incorrect material rendering.
+   - **Fix**: Added `parameters: Vec<u8>` field to `HODMaterial`. Parser captures remaining bytes after texture_maps loop via cursor position slicing. Writer appends `mat.parameters` after texture indices. All construction sites (DAE, OBJ, auto-gen stubs) initialize with `Vec::new()`. TypeScript interface updated.
 
 ### Fixes Applied (2026-06-01 Session 4)
 
@@ -335,6 +342,11 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ---
 
 ## Decision Log
+
+### 2026-06-01: STAT Material Shader Parameter Preservation
+**Decision:** Added `parameters: Vec<u8>` to `HODMaterial` struct to preserve all shader parameter bytes after texture map indices in STAT chunks. `parse_stat_material` captures remaining bytes via cursor position slicing; `write_stat_texture_params` appends them back during serialization.
+**Reason:** `parse_stat_material` was reading texture map indices but discarding all subsequent bytes (glossiness, specular colors, team colors, etc.). This caused `write_stat_texture_params` to write truncated STAT chunks, leading to HWRM engine shader uniform misalignment and incorrect material rendering in-game.
+**Impact:** `parser/src/hod.rs:93` (struct field), `:2840` (parse), `:5166` (write), `:5471,5477` (auto-gen stubs). `parser/src/dae.rs:69,80`, `parser/src/obj.rs:24,34` (constructions). `src/components/Viewport.tsx:143` (TypeScript interface), `src/components/HierarchyTree.tsx:857` (add material). All verify_lossless tests pass.
 
 ### 2026-05-30: Pipeline Audit — KDOP/SCAR Gap Analysis
 **Decision:** Full audit of HODEditorJS vs HODOR/DAEnerys pipeline differences. Identified 3 critical/high gaps: (1) KDOP collision trees not generated from scratch — from-scratch DAE imports get COLD instead, (2) SCAR battle scars not generated, (3) DAE texture mapping only resolves diffuse. Created implementation plan in `kdop-scar-pipeline-gap-plan.md`. Collision mesh DAE discard is by design (editor creates new collision mesh nodes).
@@ -595,10 +607,10 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ---
 
-**Latest Test Results:** `npm run build` succeeds after the HOD 1.0 retrofit fixes (Vite warning only: main chunk larger than 500 kB). `cargo run --bin verify_lossless` completed after the parser changes; generated file size mismatch lines remain expected, and structural reparses report `SUCCESS: Re-parsed generated file!` with matching mesh/joint/nav/marker/burn counts plus DAE fallback `DAE generation succeeded! Output size: 342189 bytes`. `cargo check` succeeds.
+**Latest Test Results:** `cargo check --lib` passes (38 pre-existing warnings). `npm run build` passes. `cargo run --bin verify_lossless` passes all 3 test files: pebble_0.hod (HOD 2.0, Meshes=3, Joints=30, NavLights=16, Markers=5, EngineBurns=8), ter_fenris.hod (HOD 2.0, Meshes=7, Joints=51, NavLights=4, Markers=11, EngineBurns=4), asteroid_3.hod (HOD 1.0→2.0, Meshes=3, Joints=4, NavLights=0, Markers=0, EngineBurns=0). DAE fallback succeeds. Size mismatch lines are expected (recompression differences).
 
-**Document Version:** 10.0  
-**Last Updated:** 2026-05-30  
+**Document Version:** 11.0  
+**Last Updated:** 2026-06-01  
 **Status:** Collision pipeline implementation complete. COLD and KDOP both generated from collision mesh vertices. DAE parser extracts COL[...] vertices. 26-DOP convex hull algorithm implemented. Knowledge base updated with corrected binary formats.
 
 ## 2026-05-30: Crash on DAE Rendering Root Cause Found

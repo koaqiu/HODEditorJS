@@ -44,9 +44,8 @@
 - [x] Fix the following HOD 1.0 loading issues:
     - Animations not being loaded properly (not shown in editor for `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/ter_orion/ter_orion.hod`)
     - Docking Paths not being loeaded properly (not shown in editor for `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/ship/ter_orion/ter_orion.hod`)
-
-- [ ] Saving a HOD file (which creates a HOD 2.0) renders wrong in game, showing the whole mesh being turned some degrees to the left and down.
-- [ ] Loading HOD 1.0 file still needs y flipping on all textures, it happened only on the first one
+- [x] Saving a HOD file (which creates a HOD 2.0) renders wrong in game, showing the whole mesh being turned some degrees to the left and down.
+- [x] Loading HOD 1.0 file still needs y flipping on all textures, it happened only on the first one
 
 ## As a final test for HOD modifying:
 

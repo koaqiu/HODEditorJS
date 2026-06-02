@@ -144,6 +144,7 @@ export interface HODMaterial {
   name: string;
   shader_name: string;
   texture_maps: string[];
+  parameters: number[];
 }
 
 export interface HODModel {
