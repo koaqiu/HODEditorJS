@@ -41,6 +41,8 @@ This tool lets you inspect, edit, and save `.hod` files with a visual interface.
 - Create new blank HOD 2.0 models
 - Import/export OBJ meshes (per-LOD mesh, collision hull, engine glow, engine shape)
 - Import/export GLTF models
+- Import/export GLTF animations
+- Import/export Node Tree architectures as JSON
 - Import/export TGA textures (batch import with auto DXT1/DXT5 detection)
 - Import/export material libraries as JSON
 - Compile animations to binary `.mad` files
@@ -89,9 +91,8 @@ This tool lets you inspect, edit, and save `.hod` files with a visual interface.
 - Coordinate cloning from any other joint in the model
 
 **Settings**
-- Shader directory configuration (persistent JSON storage)
-- keeper.txt path management for texture resolution and shader pipeline scanning
-- Configurable via Inspector's Configure button
+- Centralized global Settings Modal accessible from the top toolbar
+- Shader directory configuration (persistent JSON storage) allows selecting multiple native OS folders for resolving raw textures and materials
 
 ---
 
@@ -118,7 +119,6 @@ This editor is actively developed and has known gaps. Please be aware before usi
 - **Missing Texture Filtering**: Texture previews in the material inspector are raw PNG conversions without filtering.
 
 **General**
-- **No Dedicated Settings Panel**: Shader directories and keeper.txt paths are configured through the Inspector's Configure button and toolbar inputs rather than a centralized settings UI.
 - **No Preferences Persistence**: Window size, panel widths, and last-opened paths are not persisted between sessions.
 
 ---
@@ -223,6 +223,10 @@ This feature is under active development. Complex DAE files with advanced featur
 | Export OBJ (engine shape) | Export engine shape mesh as OBJ |
 | Export GLTF | Export all visible 3D meshes as `.gltf` |
 | Import GLTF | Import `.gltf` meshes and append to model |
+| Export GLTF (Animations)| Export single skeleton animation track to `.gltf` |
+| Import GLTF (Animations)| Import animation tracks from `.gltf` and map to skeleton |
+| Export JSON (Node Tree) | Serialize skeleton structure (no meshes) to JSON |
+| Import JSON (Node Tree) | Rebuild skeleton structure from JSON |
 | Import TGA | Multi-file TGA import with PNG preview, auto DXT1/DXT5 detection |
 | Export TGA | Batch export all model textures as `.tga` files |
 | Export Materials (JSON) | Export material library as JSON + TGA textures |
