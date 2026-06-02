@@ -52,7 +52,7 @@ This tool lets you inspect, edit, and save `.hod` files with a visual interface.
 - Adaptive 3-tier grid that adjusts with camera zoom
 - Cinematic 4-light setup (deep space ambient, distant sun, cool nebula fill, warm dust bounce)
 - Togglable layers: NavLights, Collision Hulls, Dockpaths, Engine Burns, Node Hierarchy Lines
-- Auto-camera focus on model load
+- Auto-camera focus on model load (WIP)
 - Joint spheres, bone lines, marker cones, NavLight pulsing sprites, dockpath pyramids
 - Engine burn/glow/shape and collision hull visualization
 
@@ -106,17 +106,15 @@ This editor is actively developed and has known gaps. Please be aware before usi
 - **No Keyboard Shortcuts**: All operations must be performed through the UI. No hotkey bindings exist.
 - **No Batch Operations**: No batch rename, batch reparent, or batch property editing.
 - **No Scale Gizmo**: Only Move and Rotate transform gizmos are available in the viewport. Scale transform is not exposed.
-
-**Animation (WIP)**
-- Animation editing is a work in progress. Keyframes serialize and export correctly to `.mad` files, but the in-viewport playback rendering is incomplete. Mesh delta transforms propagate via joint animation, but complex multi-joint animations may not preview accurately.
+- **No LOD generation**: WIP to auto generate LOD meshes based on LOD0 mesh.
 
 **File Format Issues**
-- **Saving as HOD 1.3**: The editor saves files using the HOD 2.0 binary format. The version header written may be misinterpreted by some tools as HOD 1.3 rather than pure 2.0.
-- **Opening HOD 1.0 (HW2 Classic)**: While the parser handles HOD 1.0 binary decompression and two-pass material/texture resolution, some legacy HW2 Classic files may exhibit parsing edge cases. The migration assistant can help convert 1.0 structures to 2.0.
-- **DAE Import is Unstable**: The Collada/DAE importer is a work in progress. It may cause crashes, produce incorrect hierarchy structures, or fail on complex models. Use OBJ import for reliable mesh replacement. Back up your work before attempting DAE import.
+- **Saving as HOD 1.3**: The editor saves files using the HOD 2.0 binary format.
+- **Opening HOD 1.0 (HW2 Classic)**: Untested, can currently only open 1.3 and 2.0 HODs
+- **DAE Import is Unstable**: The Collada/DAE importer is a work in progress. It may cause crashes on HODs created with this, produce incorrect hierarchy structures, or fail on complex models. Use OBJ import for reliable mesh replacement. Back up your work before attempting DAE import.
 
 **Textures**
-- **No Texture Filtering**: The viewport does not apply mipmapping or texture filtering. Textures may appear aliased at distance.
+- **No Texture Filtering**: The exported HOd does not apply mipmapping or texture filtering. Textures may appear aliased at close.
 - **Missing Texture Filtering**: Texture previews in the material inspector are raw PNG conversions without filtering.
 
 **General**
@@ -131,7 +129,7 @@ The editor supports importing Wavefront `.obj` files to replace mesh geometry at
 
 ### Axis Orientation
 
-Homeworld Remastered uses a specific coordinate system. When exporting OBJ files from Blender, Maya, or other 3D tools, ensure your model is oriented as follows:
+Homeworld Remastered uses a specific coordinate system. When exporting OBJ files from Blender, Maya, or other 3D tools, ensure your model is oriented as follows once imported in the editor:
 
 | Axis | Direction | Description |
 |:---:|:---:|:---|
@@ -148,6 +146,8 @@ Homeworld Remastered uses a specific coordinate system. When exporting OBJ files
       /
      X (Horizontal)
 ```
+
+The information below might need verification:
 
 **Blender Export Settings:**
 - Forward axis: **-Z** (or adjust to match Z-Front convention)
@@ -167,7 +167,7 @@ Homeworld Remastered uses a specific coordinate system. When exporting OBJ files
 4. Click **Import OBJ** to load your `.obj` file
 5. The mesh geometry replaces the selected LOD in-place, reconstructing positions, normals, and UV coordinates
 
-### Importing Collision Hulls
+### Importing Collision Hulls and Auto Generation
 
 1. Select a **Collision** node in the hierarchy tree
 2. In the Inspector panel, click **Import OBJ** under the collision mesh section
@@ -305,7 +305,7 @@ This feature is under active development. Complex DAE files with advanced featur
 ```
 ┌────────────────────────────────────────────────────────┐
 │                     FRONTEND (UI)                      │
-│         React 19 + TypeScript 5.8 + Vite 7            │
+│         React 19 + TypeScript 5.8 + Vite 7             │
 │  - 4-Tab Hierarchy Tree (Hierarchy/Materials/          │
 │    Animations/Target Boxes)                            │
 │  - Inspector Panel (per-node property editing)         │
