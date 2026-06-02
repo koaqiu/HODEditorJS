@@ -509,7 +509,7 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
 
           {/* ─ Animation selector ─ */}
           <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-            {hasAnims ? (
+            {hasAnims && (
               <select
                 value={selectedAnimIdx}
                 onChange={(e) => {
@@ -528,7 +528,8 @@ export const AnimationDock: React.FC<AnimationDockProps> = ({
                   <option key={anim.name} value={idx}>{anim.name}</option>
                 ))}
               </select>
-            ) : (
+            )}
+            {!hasAnims && (
               <span style={{ fontSize: "11px", color: "var(--text-muted)", fontStyle: "italic" }}>
                 No animations
               </span>

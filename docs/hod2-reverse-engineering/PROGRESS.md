@@ -695,3 +695,11 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
   2. Fixed the animation selection logic to fetch the *true* array index (`model.animations!.indexOf(anim)`) instead of the filter iterator's index.
   3. Cleaned up an orphaned `onConfigureShaders` prop in `App.tsx` that caused a minor build TS error.
 * **Next Steps**: Await user confirmation for in-game testing of the latest changes.
+
+## 2026-06-02: React Unmount Crash (Follow-up Fix)
+* **What failed**: The previous `<Fragment>` wrapper approach for the animation map in `HierarchyTree.tsx` was insufficient to prevent React's `NotFoundError` during `commitLayoutEffectOnFiber` when deleting the last animation.
+* **Root Cause**: React 18's reconciler can still lose track of node parentage when unmounting a mapped array of DOM elements wrapped only in a `<Fragment>` if it switches to a different DOM node entirely (from Fragment to a fallback div). Additionally, an identical conditional rendering issue existed in `AnimationDock.tsx` where an interactive `<select>` element was being hot-swapped with a `<span>` via a ternary operator upon the final animation's deletion.
+* **What was fixed**:
+  1. Converted all conditional `<Fragment>` tags in `HierarchyTree.tsx` (`animations`, `materials`, `textures`) into concrete `<div style={{ display: "flex", flexDirection: "column" }}>` containers. This guarantees React mounts exactly one stable parent DOM node for the list, allowing safe unified unmounting.
+  2. Split the `hasAnims ? <select> : <span>` ternary operator in `AnimationDock.tsx` into two strictly separate boolean conditional blocks (`hasAnims && <select>` and `!hasAnims && <span>`), preventing node replacement overlaps on interactive inputs during layout effects.
+* **Next Steps**: Await user verification that the animation deletion bug is completely eliminated.

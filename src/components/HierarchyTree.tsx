@@ -2762,7 +2762,7 @@ const handleDeleteNode = (name: string, type: string) => {
               <div>
                 <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px", paddingLeft: "8px" }}>Materials</div>
                 {model.materials && model.materials.length > 0 ? (
-                  <>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
                     {model.materials
                       .filter(m => !searchTerm || m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.shader_name.toLowerCase().includes(searchTerm.toLowerCase()))
                       .map((material, idx) => {
@@ -2790,7 +2790,7 @@ const handleDeleteNode = (name: string, type: string) => {
                         </div>
                       );
                     })}
-                  </>
+                  </div>
                 ) : (
                   <div style={{ padding: "10px", color: "var(--text-muted)", fontSize: "12px", textAlign: "center" }}>
                     No materials defined.
@@ -2809,7 +2809,7 @@ const handleDeleteNode = (name: string, type: string) => {
                 </div>
                 {model.textures && model.textures.length > 0 ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "4px" }}>
-                    <>
+                    <div style={{ display: "contents" }}>
                       {model.textures
                         .filter(t => !searchTerm || t.name.toLowerCase().includes(searchTerm.toLowerCase()))
                         .map((texture, idx) => (
@@ -2853,7 +2853,7 @@ const handleDeleteNode = (name: string, type: string) => {
                           </div>
                         </div>
                       ))}
-                    </>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ padding: "10px", color: "var(--text-muted)", fontSize: "12px", textAlign: "center" }}>
@@ -2864,7 +2864,7 @@ const handleDeleteNode = (name: string, type: string) => {
             </div>
           ) : activeTab === "animations" ? (
             model.animations && model.animations.length > 0 ? (
-              <>
+              <div style={{ display: "flex", flexDirection: "column" }}>
                 {model.animations
                   .filter(a => !searchTerm || a.name.toLowerCase().includes(searchTerm.toLowerCase()))
                   .map((anim) => {
@@ -2938,7 +2938,7 @@ const handleDeleteNode = (name: string, type: string) => {
                       </div>
                     );
                   })}
-              </>
+              </div>
             ) : (
               <div style={{ padding: "30px 20px", color: "var(--text-muted)", fontSize: "13px", textAlign: "center", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
                 <Activity size={24} style={{ color: "var(--border-color)", opacity: 0.5 }} />
