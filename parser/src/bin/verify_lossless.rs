@@ -8,6 +8,12 @@ fn main() {
     let fenris_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld/HWRM_FSFC/source/ship/ter_fenris/ter_fenris.hod";
     let asteroid_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/freespace_remastered/resource/asteroid/asteroid_3/asteroid_3.hod";
     let dae_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/effect/galaxymap/hodsunpacked/mapgalaxy/galaxymapgalaxy.dae";
+    let carrier_path = "/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/WorkshopTool/uncompressed_bigs/HWRM/ship/hgn_carrier/hgn_carrier.hod";
+
+    println!("--- Testing hgn_carrier (HOD) ---");
+    let bytes = fs::read(carrier_path).unwrap();
+    let model = HODModel::parse(&bytes).unwrap();
+    println!("Parsed carrier! Dockpaths: {}", model.dockpaths.len());
 
     println!("--- Testing Pebble (HOD 2.0) ---");
     test_file(pebble_path, true);

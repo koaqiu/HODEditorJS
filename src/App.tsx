@@ -72,10 +72,6 @@ function App() {
   const [migrationCoordinateClones, setMigrationCoordinateClones] = useState<Record<string, string>>({});
 
   // Big Data Settings and Toggling states
-  const [showNavLights, setShowNavLights] = useState(true);
-  const [showCollision, setShowCollision] = useState(true);
-  const [showDockpaths, setShowDockpaths] = useState(true);
-  const [showEngineBurns, setShowEngineBurns] = useState(true);
   const [showBoneLines, setShowBoneLines] = useState(true);
   const [renderMode, setRenderMode] = useState<"untextured" | "textured" | "shaded" | "wireframe" | "shaded_team" | "textured_team">("shaded");
   const [teamColor, setTeamColor] = useState("#4278a3");
@@ -783,6 +779,41 @@ function App() {
     }
   };
 
+  const isLayerVisible = (prefix: string, items: any[] | undefined) => {
+    if (!items || items.length === 0) return false;
+    const targetItems = prefix === 'mesh' ? items.filter(item => item.lod === 0) : items;
+    if (targetItems.length === 0) return false;
+    return targetItems.every(item => {
+      let key = `${prefix}:${item.name}`;
+      if (prefix === 'mesh') key = `${item.name}_lod_${item.lod}`;
+      return visibleMeshes[key] !== false;
+    });
+  };
+
+  const toggleLayer = (prefix: string, items: any[] | undefined, currentState: boolean) => {
+    if (!items || items.length === 0) return;
+    const targetItems = prefix === 'mesh' ? items.filter(item => item.lod === 0) : items;
+    setVisibleMeshes(prev => {
+      const updated = { ...prev };
+      // Force all LOD > 0 to be off if we are toggling meshes
+      if (prefix === 'mesh') {
+        items.forEach(item => {
+          if (item.lod > 0) {
+            updated[`${item.name}_lod_${item.lod}`] = false;
+          }
+        });
+      }
+      targetItems.forEach(item => {
+        let key = `${prefix}:${item.name}`;
+        if (prefix === 'mesh') {
+          key = `${item.name}_lod_${item.lod}`;
+        }
+        updated[key] = !currentState;
+      });
+      return updated;
+    });
+  };
+
   return (
     <div className="app-container">
       {(isLoading || isSaving) && (
@@ -938,8 +969,26 @@ function App() {
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
                   <input
                     type="checkbox"
-                    checked={showNavLights}
-                    onChange={(e) => setShowNavLights(e.target.checked)}
+                    checked={isLayerVisible("mesh", model?.meshes)}
+                    onChange={() => toggleLayer("mesh", model?.meshes, isLayerVisible("mesh", model?.meshes))}
+                    style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
+                  />
+                  <span>Meshes</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
+                  <input
+                    type="checkbox"
+                    checked={isLayerVisible("engine_glow", model?.engine_glows)}
+                    onChange={() => toggleLayer("engine_glow", model?.engine_glows, isLayerVisible("engine_glow", model?.engine_glows))}
+                    style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
+                  />
+                  <span>Engine Glows</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
+                  <input
+                    type="checkbox"
+                    checked={isLayerVisible("navlight", model?.nav_lights)}
+                    onChange={() => toggleLayer("navlight", model?.nav_lights, isLayerVisible("navlight", model?.nav_lights))}
                     style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
                   />
                   <span>NavLights</span>
@@ -947,8 +996,8 @@ function App() {
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
                   <input
                     type="checkbox"
-                    checked={showCollision}
-                    onChange={(e) => setShowCollision(e.target.checked)}
+                    checked={isLayerVisible("collision", model?.collision_meshes)}
+                    onChange={() => toggleLayer("collision", model?.collision_meshes, isLayerVisible("collision", model?.collision_meshes))}
                     style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
                   />
                   <span>Collision Hulls</span>
@@ -956,8 +1005,8 @@ function App() {
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
                   <input
                     type="checkbox"
-                    checked={showDockpaths}
-                    onChange={(e) => setShowDockpaths(e.target.checked)}
+                    checked={isLayerVisible("dockpath", model?.dockpaths)}
+                    onChange={() => toggleLayer("dockpath", model?.dockpaths, isLayerVisible("dockpath", model?.dockpaths))}
                     style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
                   />
                   <span>Dockpaths</span>
@@ -965,11 +1014,29 @@ function App() {
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
                   <input
                     type="checkbox"
-                    checked={showEngineBurns}
-                    onChange={(e) => setShowEngineBurns(e.target.checked)}
+                    checked={isLayerVisible("engine_burn", model?.engine_burns)}
+                    onChange={() => toggleLayer("engine_burn", model?.engine_burns, isLayerVisible("engine_burn", model?.engine_burns))}
                     style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
                   />
                   <span>Engine Burns</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
+                  <input
+                    type="checkbox"
+                    checked={isLayerVisible("marker", model?.markers)}
+                    onChange={() => toggleLayer("marker", model?.markers, isLayerVisible("marker", model?.markers))}
+                    style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
+                  />
+                  <span>Markers</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
+                  <input
+                    type="checkbox"
+                    checked={isLayerVisible("joint", model?.joints)}
+                    onChange={() => toggleLayer("joint", model?.joints, isLayerVisible("joint", model?.joints))}
+                    style={{ width: "auto", height: "auto", margin: 0, cursor: "pointer" }}
+                  />
+                  <span>Joint Nodes</span>
                 </label>
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "10px", fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", userSelect: "none", width: "100%" }}>
                   <input
@@ -1041,10 +1108,6 @@ function App() {
                 setTransformMode={setTransformMode}
                 onNodeTransform={handleNodeTransform}
                 visibleMeshes={visibleMeshes}
-                showNavLights={showNavLights}
-                showCollision={showCollision}
-                showDockpaths={showDockpaths}
-                showEngineBurns={showEngineBurns}
                 showBoneLines={showBoneLines}
                 renderMode={renderMode}
                 teamColor={teamColor}

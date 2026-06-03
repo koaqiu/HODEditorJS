@@ -31,6 +31,24 @@ Throughout the reverse engineering process, several critical quirks regarding th
   * **Texture Orientation & DXT Block Order**: HOD 2.0 `POOL` chunks store DXT-compressed textures in **top-down** block order (block row 0 = image top). Our DXT decompressors (`decompress_dxt1`/`decompress_dxt3`/`decompress_dxt5`) write pixels at `pixel_offset = (py * width + px) * 4` with `py = by * 4 + y`, producing top-down RGBA that matches standard image convention. DXT1 uses 8 bytes per 4x4 block; DXT3 and DXT5 use 16 bytes per 4x4 block. DXT3 is BC2-style explicit 4-bit alpha (8 alpha bytes followed by the DXT1-like color block), not DXT5 interpolated alpha. **No flip is needed** when compressing top-down RGBA back to DXT for the POOL. The frontend uses `tex.flipY = true` (Viewport.tsx:1288), which makes Three.js flip the top-down PNG to bottom-up on GPU upload — matching the DirectX rendering convention. For the editor UI thumbnail previews (hierarchy tree, inspector panels), flip the RGBA before PNG encoding so they display correctly as standard images. **Critical pitfall**: `encode_b64_png_thumbnail` must NOT flip internally — it previously did, causing a double-flip when combined with `flipY = true`.
   * **HOD 1.0 Inline LMIP/TEXM Mip Dimensions**: Legacy HOD 1.0 inline texture chunks store only the base texture width/height before the compressed mip byte stream. They do **not** include `(width,height)` pairs for every remaining mip level. HOD 2.0 POOL-backed LMIP chunks do include per-mip dimensions in the LMIP header. Therefore `parse_texture` must skip remaining mip dimensions only when `context.is_v2 == true`; doing so for HOD 1.0 shifts the inline DXT byte cursor into compressed data by 8 bytes per extra mip, corrupting DXT5 alpha/color data and also subtly corrupting multi-mip DXT1 textures.
   * **HIER `sx, sy, sz` Fields Are Bounds, Not Scale**: The three floats after rotation in the HIER chunk per-joint record are **vector bounds** (gimbal limits or joint extents), NOT scale multipliers. Writing actual scale values (or the parsed bounds) into these fields causes the game engine to misinterpret them as scale, corrupting joint transforms and rotating the ship away from its forward vector. Always write `(1.0, 1.0, 1.0)` for these fields on save. The `compose_transform_matrix` function should also use `(1.0, 1.0, 1.0)` for scale when building `local_transform` from parsed HIER data.
+  * ## DOCK Chunks
+
+  Dockpaths in `HWRM` ships use an extended structure that includes multiple length-prefixed strings.
+  Previously, reverse-engineering efforts assumed `padding1` and `padding2` fields were `u32` integer blocks. They are, in fact, **length-prefixed strings** (representing fields like `dockpath_flags` or `link_paths`).
+
+  For small ships (e.g. Fighters/Corvettes), these string fields are empty, resulting in `00 00 00 00` lengths, which masqueraded perfectly as `u32` integer padding. However, for Capital Ships like the Carrier (`hgn_carrier.hod`), the `link_paths` field contains data like `"path6, path12, path13"`. Parsing this as a `u32` caused catastrophic buffer misalignment resulting in `failed to fill whole buffer`.
+
+  **Structure:**
+  * `name` (String)
+  * `parent_name` (String)
+  * `val1` through `val5` (5x `u32`)
+  * `compatible_ships` (String)
+  * `padding1` (String - often empty)
+  * `padding2` (String - link paths, e.g. "path6, path12")
+  * `num_points` (`i32`)
+  * `points` (Array)
+
+  Also, `first_val` in the DOCK chunk header is simply the number of dockpaths, not a version header.
   * HOD 1.0 `DOCK` chunks are valid editor data and must not be skipped just because `context.is_v2 == false`. Use legacy/extended layout fallback because observed ship files can include extra path metadata such as compatible ship strings.
   * HOD 1.0 files may use companion `.mad` files for animation even when embedded `MRKR/KEYF` chunks are empty. Load the companion MAD before falling back to embedded KEYF.
 * **Non-Essential Chunks**:

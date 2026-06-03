@@ -167,8 +167,8 @@ pub struct HODDockpath {
     pub val4: u32,
     pub val5: u32,
     pub compatible_ships: String,
-    pub padding1: u32,
-    pub padding2: u32,
+    pub padding1: String,
+    pub padding2: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -864,7 +864,9 @@ impl HODModel {
                             "DOCK" => match parse_dock_chunk(&sub_chunk.data, context.is_v2) {
                                 Ok(parsed_dockpaths) => dockpaths.extend(parsed_dockpaths),
                                 Err(e) => {
-                                    println!("[RUST] WARNING: Failed to parse DOCK chunk: {}", e)
+                                    println!("[RUST] WARNING: Failed to parse DOCK chunk: {}", e);
+                                    let preview = sub_chunk.data.iter().take(128).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                                    println!("[RUST] DOCK chunk size: {}, preview: {}", sub_chunk.data.len(), preview);
                                 }
                             },
                             "GLOW" => {
@@ -3543,11 +3545,7 @@ fn parse_dock_chunk(data: &[u8], is_v2: bool) -> Result<Vec<HODDockpath>, String
 
 fn parse_dock_extended(data: &[u8]) -> Result<Vec<HODDockpath>, String> {
     let mut r = Cursor::new(data);
-    let first_val = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
-    let mut count = first_val;
-    if first_val >= 10 && data.len() > 8 {
-        count = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
-    }
+    let count = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
 
     let remaining_bytes = r.get_ref().len() as u64 - r.position();
     let max_possible_paths = remaining_bytes / 12;
@@ -3565,8 +3563,8 @@ fn parse_dock_extended(data: &[u8]) -> Result<Vec<HODDockpath>, String> {
         let val4 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
         let val5 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
         let compatible_ships = read_len_string(&mut r)?;
-        let padding1 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
-        let padding2 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
+        let padding1 = read_len_string(&mut r)?;
+        let padding2 = read_len_string(&mut r)?;
         let num_points = r.read_i32::<LittleEndian>().map_err(|e| e.to_string())?;
         if num_points < 0 {
             return Err("Negative num_points in DOCK".to_string());
@@ -3574,15 +3572,19 @@ fn parse_dock_extended(data: &[u8]) -> Result<Vec<HODDockpath>, String> {
         let num_points = num_points as usize;
 
         let remaining_bytes = r.get_ref().len() as u64 - r.position();
+        println!("[DOCK DEBUG] path='{}', num_points={}, remaining={}", name, num_points, remaining_bytes);
+        
         let max_possible_points = remaining_bytes / 50;
         if num_points as u64 > max_possible_points {
             return Err("DOCK num_points exceeds buffer space".to_string());
         }
 
         let mut points = Vec::with_capacity(num_points);
-        for _ in 0..num_points {
-            points.push(read_dockpoint_matrix3_extra(&mut r)?);
+        for i in 0..num_points {
+            let pt = read_dockpoint_matrix3_extra(&mut r).map_err(|e| format!("path '{}' point {} err: {}", name, i, e))?;
+            points.push(pt);
         }
+
         dockpaths.push(HODDockpath {
             name,
             parent_name,
@@ -3661,8 +3663,8 @@ fn parse_dock_legacy_with_layout(
             val4: 0,
             val5: 0,
             compatible_ships: String::new(),
-            padding1: 0,
-            padding2: 0,
+            padding1: String::new(),
+            padding2: String::new(),
         });
     }
 
@@ -6098,12 +6100,8 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                 .write_u32::<LittleEndian>(path.val5)
                 .map_err(|e| e.to_string())?;
             write_len_string(&mut dock_data, &path.compatible_ships)?;
-            dock_data
-                .write_u32::<LittleEndian>(path.padding1)
-                .map_err(|e| e.to_string())?;
-            dock_data
-                .write_u32::<LittleEndian>(path.padding2)
-                .map_err(|e| e.to_string())?;
+            write_len_string(&mut dock_data, &path.padding1)?;
+            write_len_string(&mut dock_data, &path.padding2)?;
             dock_data
                 .write_i32::<LittleEndian>(path.points.len() as i32)
                 .map_err(|e| e.to_string())?;
@@ -7067,12 +7065,8 @@ pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec
                         .write_u32::<LittleEndian>(path.val5)
                         .map_err(|e| e.to_string())?;
                     write_len_string(&mut paths_payload, &path.compatible_ships)?;
-                    paths_payload
-                        .write_u32::<LittleEndian>(path.padding1)
-                        .map_err(|e| e.to_string())?;
-                    paths_payload
-                        .write_u32::<LittleEndian>(path.padding2)
-                        .map_err(|e| e.to_string())?;
+                    write_len_string(&mut paths_payload, &path.padding1)?;
+                    write_len_string(&mut paths_payload, &path.padding2)?;
                     paths_payload
                         .write_i32::<LittleEndian>(path.points.len() as i32)
                         .map_err(|e| e.to_string())?;

@@ -183,10 +183,6 @@ interface ViewportProps {
   setTransformMode: (mode: "translate" | "rotate" | "scale") => void;
   onNodeTransform: (name: string, type: string, position: Vector3D) => void;
   visibleMeshes: Record<string, boolean>;
-  showNavLights: boolean;
-  showCollision: boolean;
-  showDockpaths: boolean;
-  showEngineBurns: boolean;
   showBoneLines: boolean;
   renderMode: "untextured" | "textured" | "shaded" | "wireframe" | "shaded_team" | "textured_team";
   teamColor?: string;
@@ -211,10 +207,6 @@ export const Viewport: React.FC<ViewportProps> = ({
   setTransformMode,
   onNodeTransform,
   visibleMeshes,
-  showNavLights,
-  showCollision,
-  showDockpaths,
-  showEngineBurns,
   showBoneLines,
   renderMode,
   teamColor = "#4278a3",
@@ -1627,7 +1619,7 @@ export const Viewport: React.FC<ViewportProps> = ({
       });
 
       // 5. Render NavLights (Pulsing Previews)
-      if (showNavLights && model.nav_lights) {
+      if (model.nav_lights) {
         model.nav_lights.forEach((nav) => {
           const isNavVisible = visibleMeshes[`navlight:${nav.name}`] !== false;
           if (!isNavVisible) return;
@@ -1685,8 +1677,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         });
       }
 
-      // 6. Render Dockpaths (Pyramid helpers and line connection)
-      if (showDockpaths && model.dockpaths) {
+      // 6. Render Dockpaths (connected paths with splines)
+      if (model.dockpaths) {
         model.dockpaths.forEach((path) => {
           const isPathVisible = visibleMeshes[`dockpath:${path.name}`] !== false;
           if (!isPathVisible) return;
@@ -1861,8 +1853,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         return group;
       };
 
-      // 7. Render Engine Burns (Sequential line loops and particle spawn dots)
-      if (showEngineBurns && model.engine_burns) {
+      // 7. Render Engine Burns (exhaust trails)
+      if (model.engine_burns) {
         model.engine_burns.forEach((burn) => {
           const isBurnVisible = visibleMeshes[`engine_burn:${burn.name}`] !== false;
           if (!isBurnVisible) return;
@@ -1918,8 +1910,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         });
       }
 
-      // Render Engine Glows
-      if (showEngineBurns && model.engine_glows) {
+      // 8. Render Engine Glows
+      if (model.engine_glows) {
         model.engine_glows.forEach((glow) => {
           const isGlowVisible = visibleMeshes[`engine_glow:${glow.name}`] !== false;
           if (!isGlowVisible) return;
@@ -1943,8 +1935,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         });
       }
 
-      // Render Engine Shapes
-      if (showEngineBurns && model.engine_shapes) {
+      // 9. Render Engine Shapes
+      if (model.engine_shapes) {
         model.engine_shapes.forEach((shape) => {
           const isShapeVisible = visibleMeshes[`engine_shape:${shape.name}`] !== false;
           if (!isShapeVisible) return;
@@ -1968,8 +1960,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         });
       }
 
-      // 8. Render Collision Hulls (Boxes and wireframe sphere center + radius)
-      if (showCollision && model.collision_meshes) {
+      // 10. Render Collision Meshes (Wireframe)
+      if (model.collision_meshes) {
         model.collision_meshes.forEach((col) => {
           const isColVisible = visibleMeshes[`collision:${col.name}`] !== false;
           if (!isColVisible) return;
@@ -2181,7 +2173,7 @@ export const Viewport: React.FC<ViewportProps> = ({
         message: `Exception thrown inside Viewport scene update useEffect: ${e.stack || e.toString()}`,
       }).catch(console.error);
     }
-  }, [model, visibleMeshes, isInitialized, showNavLights, showCollision, showDockpaths, showEngineBurns, showBoneLines, renderMode, teamColor, stripeColor, targetBoxes]);
+  }, [model, visibleMeshes, isInitialized, showBoneLines, renderMode, teamColor, stripeColor, targetBoxes]);
 
   // Hook visual gizmo to the selected node
   useEffect(() => {

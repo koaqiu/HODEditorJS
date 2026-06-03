@@ -56,11 +56,14 @@
 - [x] Many nodes show up on viewport that are missing on the node tree
 - [x] DXT3 Texture compatiblity
 - [x] Remove hardcoded nameplate.bmp texture
+- [x] Make the Viewport Layer toggles also toggle visibility on all nodes but also have options to toggle markers and joint nodes
 
-- [ ] Make the Viewport Layer toggles also toggle visibility on all nodes but also have options to toggle markers and joint nodes
+- [ ] Need to make sure all texture names have their proper _TYPE suffix both in editor and on saved/loaded HODs and exported materials/textures
+
 - [ ] Editor works slow on bigger ships with many nodes, it seems to be rerendering everything on changing anything in the editor (node coordinate, node dragging, etc).
 
-- [ ] Texture upscaling/smoothing/antialiasing on saving
+- [ ] Textures lose their "smoothness" when saving, in game they render blocky
+
 - [ ] Fix auto camera distance on loading model
 - [ ] Drag based positioning / rotating in viewport (disable camera control with left click, leave it for right click)
 - [ ] reintroduce Badges
