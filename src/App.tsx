@@ -5,7 +5,9 @@ import { Toolbar } from "./components/Toolbar";
 import { HierarchyTree } from "./components/HierarchyTree";
 import { Inspector } from "./components/Inspector";
 import { AnimationDock } from "./components/AnimationDock";
+import { SetupWizard } from "./components/SetupWizard";
 import { SettingsModal } from "./components/SettingsModal";
+import { updateDynamicShaderSlots } from "./texture_utils";
 import { Info, AlertTriangle, FolderOpen, FilePlus } from "lucide-react";
 import "./App.css";
 
@@ -79,15 +81,34 @@ function App() {
   const [keeperTxtPaths, setKeeperTxtPaths] = useState<string[]>([]);
 
   // Load shader directories from config file on startup
+  const [configLoaded, setConfigLoaded] = useState(false);
+
   useEffect(() => {
     invoke<{ shader_directories: string[] }>("load_shader_config")
-      .then((config) => {
+      .then(async (config) => {
         if (config.shader_directories.length > 0) {
           setKeeperTxtPaths(config.shader_directories);
+          try {
+            const dynamicShaders = await invoke<{name: string, slots: string[]}[]>("get_dynamic_shader_slots", { keeperPaths: config.shader_directories });
+            updateDynamicShaderSlots(dynamicShaders);
+          } catch (e) {
+            console.error("Failed to load dynamic shader slots", e);
+          }
         }
       })
-      .catch((e) => console.error("Failed to load shader config:", e));
+      .catch((e) => console.error("Failed to load shader config:", e))
+      .finally(() => setConfigLoaded(true));
   }, []);
+
+  const handleSetupComplete = async (paths: string[]) => {
+    setKeeperTxtPaths(paths);
+    try {
+      const dynamicShaders = await invoke<{name: string, slots: string[]}[]>("get_dynamic_shader_slots", { keeperPaths: paths });
+      updateDynamicShaderSlots(dynamicShaders);
+    } catch (e) {
+      console.error("Failed to load dynamic shader slots", e);
+    }
+  };
 
   // Log application startup
   useEffect(() => {
@@ -818,6 +839,9 @@ function App() {
 
   return (
     <div className="app-container">
+      {configLoaded && keeperTxtPaths.length === 0 && (
+        <SetupWizard onComplete={handleSetupComplete} />
+      )}
       {(isLoading || isSaving) && (
         <div style={{
           position: "fixed",

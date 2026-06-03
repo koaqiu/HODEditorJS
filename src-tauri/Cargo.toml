@@ -28,5 +28,6 @@ hwr_hod_parser = { path = "../parser" }
 rfd = "0.14"
 chrono = "0.4.44"
 base64 = "0.22.1"
+regex = "1.12.3"
 
 

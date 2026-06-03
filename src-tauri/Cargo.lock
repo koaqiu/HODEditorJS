@@ -1531,6 +1531,7 @@ dependencies = [
  "chrono",
  "hwr_hod_parser",
  "image",
+ "regex",
  "rfd",
  "serde",
  "serde_json",

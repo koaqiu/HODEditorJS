@@ -12,7 +12,7 @@ export interface TextureGroup {
   textures: TextureGroupItem[];
 }
 
-export const KNOWN_TYPES = ["_DIFF", "_GLOW", "_TEAM", "_NORM", "_SPEC", "_STRP", "_PAIN", "_MASK", "_EMIS"];
+export let KNOWN_TYPES = ["_DIFF", "_GLOW", "_TEAM", "_NORM", "_SPEC", "_STRP", "_PAIN", "_MASK", "_EMIS"];
 
 export function parseTextureGroups(textures: HODTexture[]): TextureGroup[] {
   const groups = new Map<string, TextureGroup>();
@@ -52,7 +52,7 @@ export function parseTextureGroups(textures: HODTexture[]): TextureGroup[] {
   return Array.from(groups.values());
 }
 
-export const SHADER_SLOTS: Record<string, string[]> = {
+export let SHADER_SLOTS: Record<string, string[]> = {
   ship: ["Diffuse Map (DIFF)", "Glow Map (GLOW)", "Team Paint Map (TEAM)", "Normal Map (NORM)", "Specular Map (SPEC)"],
   badge: ["Badge Diffuse Map (DIFF)"],
   badgeglow: ["Badge Diffuse Map (DIFF)", "Glow Map (GLOW)"],
@@ -78,4 +78,20 @@ export function getExpectedTextureType(shaderName: string, mapIndex: number): st
     return "_" + match[1];
   }
   return null;
+}
+
+
+export function updateDynamicShaderSlots(dynamicShaders: {name: string, slots: string[]}[]) {
+  const newTypes = new Set(KNOWN_TYPES);
+  for (const shader of dynamicShaders) {
+    const formattedSlots = shader.slots.map(slot => {
+      // e.g. "diffuse" -> "Diffuse (DIFFUSE)", "glow" -> "Glow (GLOW)"
+      const suffix = "_" + slot.toUpperCase();
+      newTypes.add(suffix);
+      return `${slot.charAt(0).toUpperCase() + slot.slice(1)} Map (${slot.toUpperCase()})`;
+    });
+    // Merge or replace
+    SHADER_SLOTS[shader.name.toLowerCase()] = formattedSlots;
+  }
+  KNOWN_TYPES = Array.from(newTypes);
 }

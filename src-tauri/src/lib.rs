@@ -425,6 +425,82 @@ fn save_shader_config(app_handle: tauri::AppHandle, config: ShaderConfig) -> Res
     Ok(())
 }
 
+
+#[derive(serde::Serialize)]
+struct ShaderInfo {
+    name: String,
+    slots: Vec<String>,
+}
+
+#[tauri::command]
+fn get_dynamic_shader_slots(keeper_paths: Vec<String>) -> Result<Vec<ShaderInfo>, String> {
+    use std::collections::HashMap;
+    use regex::Regex;
+    let mut shaders = HashMap::new();
+    
+    // We match $param or things that look like texture params
+    let re = Regex::new(r"\$([a-zA-Z0-9_]+)").map_err(|e| e.to_string())?;
+
+    for path_str in &keeper_paths {
+        let keeper_dir = std::path::Path::new(path_str);
+        // Sometimes they are in shaders/ or shaders/gl_prog/
+        let dirs_to_check = [
+            keeper_dir.join("shaders"),
+            keeper_dir.join("shaders").join("gl_prog"),
+        ];
+
+        for dir in &dirs_to_check {
+            if dir.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                            if ext == "prog" || ext == "fx" || ext == "shader" {
+                                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                                    let content = std::fs::read_to_string(&path).unwrap_or_default();
+                                    let mut params = Vec::new();
+                                    for cap in re.captures_iter(&content) {
+                                        let param = cap[1].to_string();
+                                        if !params.contains(&param) {
+                                            params.push(param);
+                                        }
+                                    }
+                                    
+                                    let mut name = stem.to_string();
+                                    if let Some(stripped) = name.strip_prefix("sob_") {
+                                        name = stripped.to_string();
+                                    }
+                                    
+                                    if !shaders.contains_key(&name) {
+                                        shaders.insert(name, params);
+                                    } else {
+                                        // Merge params
+                                        if let Some(existing) = shaders.get_mut(&name) {
+                                            for p in params {
+                                                if !existing.contains(&p) {
+                                                    existing.push(p);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut result = Vec::new();
+    for (name, slots) in shaders {
+        result.push(ShaderInfo { name, slots });
+    }
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(result)
+}
+
 #[tauri::command]
 fn get_shader_pipelines(keeper_paths: Vec<String>) -> Result<Vec<String>, String> {
     write_log(
@@ -761,6 +837,7 @@ pub fn run() {
             select_shader_directory,
             log_event,
             get_shader_pipelines,
+            get_dynamic_shader_slots,
             load_shader_config,
             save_shader_config,
             save_text_file,
