@@ -369,30 +369,52 @@ npm install
 npm run tauri dev
 ```
 
-### Build Linux Binaries (deb, rpm, AppImage)
-Ensure you have the required OS-level GUI dependencies (like `librsvg2-devel` and `squashfs-tools` on Fedora).
+### Build Linux Binaries (.deb, .rpm, .AppImage)
+
+**All builds must be performed inside the `esp-dev` distrobox.** Native host builds fail due to missing GTK/WebKit dependencies and AppImage FUSE issues.
+
 ```bash
-# NO_STRIP=1 is required on modern Linux distributions (like Fedora 41) 
-# to bypass an outdated strip utility bundled in linuxdeploy for AppImages.
+# Enter the distrobox
+distrobox enter esp-dev
+
+# Build Linux bundles (NO_STRIP=1 required on Fedora 41+ to bypass outdated linuxdeploy strip)
 NO_STRIP=1 npm run tauri build
 ```
-Binaries will be output to `src-tauri/target/release/bundle/`.
+
+**Output:**
+- `src-tauri/target/release/bundle/deb/HODEditorJS_1.1.0_amd64.deb`
+- `src-tauri/target/release/bundle/rpm/HODEditorJS-1.1.0-1.x86_64.rpm`
+- `src-tauri/target/release/bundle/appimage/HODEditorJS_1.1.0_amd64.AppImage`
 
 ### Cross-Compile Windows Installer (.exe) from Linux
-You can cross-compile the Windows installer directly from Linux using the `mingw-w64` toolchain and `makensis`.
 
-**Dependencies (Fedora example):**
+Windows cross-compilation uses `mingw-w64` inside the same `esp-dev` distrobox. The `dlltool` path-with-spaces bug requires `CARGO_TARGET_DIR=/tmp/cargo_target`.
+
 ```bash
-sudo dnf install -y mingw64-gcc mingw64-gcc-c++ mingw64-winpthreads-static mingw64-nsis mingw32-nsis
+distrobox enter esp-dev
+
+# Add the Rust target (only needed once)
 rustup target add x86_64-pc-windows-gnu
-```
 
-**Build Command:**
-```bash
-# We use a custom CARGO_TARGET_DIR to bypass a known dlltool bug if your repository path contains spaces.
+# Build Windows NSIS installer
 CARGO_TARGET_DIR=/tmp/cargo_target npm run tauri build -- --target x86_64-pc-windows-gnu --bundles nsis
 ```
-The Windows installer will be output to `/tmp/cargo_target/x86_64-pc-windows-gnu/release/bundle/nsis/`.
+
+**Output:**
+- `/tmp/cargo_target/x86_64-pc-windows-gnu/release/hodeditorjs.exe` (23 MB)
+- `/tmp/cargo_target/x86_64-pc-windows-gnu/release/bundle/nsis/HODEditorJS_1.1.0_x64-setup.exe` (11 MB)
+
+### Windows Runtime DLLs
+
+The Windows installer bundles MinGW runtime DLLs because `meshopt 0.6.2` explicitly links `libstdc++` dynamically via `cc-rs`. This means `-static-libstdc++` alone does not remove the import — the DLLs must be installed alongside the exe.
+
+The NSIS hook at `src-tauri/windows/nsis-hooks.nsh` installs these into `$INSTDIR` during installation:
+
+- `libstdc++-6.dll`
+- `libgcc_s_seh-1.dll`
+- `libwinpthread-1.dll`
+
+These are wired into Tauri via `bundle.windows.nsis.installerHooks` in `src-tauri/tauri.conf.json`. Do not remove this config unless the `meshopt` crate is patched to use static C++ linkage.
 
 ---
 

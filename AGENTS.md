@@ -16,6 +16,27 @@ This handbook will explain:
 
 ---
 
+## Build & Packaging
+
+**All release builds (`tauri build`) must be performed inside the `esp-dev` distrobox.** Native host builds fail due to missing GTK/WebKit dependencies and AppImage FUSE issues. The Windows cross-compile also requires `esp-dev` for `mingw-w64` and `makensis`.
+
+```bash
+distrobox enter esp-dev
+
+# Linux
+NO_STRIP=1 npm run tauri build
+
+# Windows NSIS
+CARGO_TARGET_DIR=/tmp/cargo_target npm run tauri build -- --target x86_64-pc-windows-gnu --bundles nsis
+```
+
+For parser-only verification: `cargo check --lib --manifest-path parser/Cargo.toml` (or `--lib` to skip unrelated `validation_suite.rs`).
+For frontend-only verification: `npm run build`.
+
+See `README.md` for full artifact paths and details.
+
+---
+
 ## Documentation Update Rule
 
 **MANDATORY**: Before ending any session, update the reverse engineering project documentation so another agent can pick up the work without context loss.

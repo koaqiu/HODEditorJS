@@ -76,3 +76,24 @@ When making changes, ensure `verify_lossless` successfully evaluates the followi
 * **Reference HODOR Scripts**: If you are stuck trying to map out how a specific chunk behaves, inspect the original `HODOR`/`RODOH` conversion scripts provided by Gearbox:
   `/run/media/system/Data/SteamLibrary/steamapps/common/Homeworld 347380/GBXTools/HODOR/`
 * **Maintain the Knowledge Base**: This document and the `hod2_serialization_walkthrough.md` file should be treated as living artifacts. Update them whenever new quirks about the HOD 2.0 file format are uncovered.
+
+## 5. Build & Compilation Reference
+
+**All release builds must run inside the `esp-dev` distrobox.** Native host builds fail due to missing GTK/WebKit libraries and AppImage FUSE issues.
+
+```bash
+distrobox enter esp-dev
+
+# Linux (.deb, .rpm, .AppImage)
+NO_STRIP=1 npm run tauri build
+
+# Windows (.exe NSIS installer)
+CARGO_TARGET_DIR=/tmp/cargo_target npm run tauri build -- --target x86_64-pc-windows-gnu --bundles nsis
+```
+
+**Parser verification** (no GTK dependency, runs on native host):
+```bash
+cargo check --lib --manifest-path parser/Cargo.toml
+```
+
+**Windows runtime note:** `meshopt 0.6.2` links `libstdc++` dynamically via `cc-rs`, so the NSIS installer bundles `libstdc++-6.dll`, `libgcc_s_seh-1.dll`, and `libwinpthread-1.dll` via `src-tauri/windows/nsis-hooks.nsh`. This hook is wired through `bundle.windows.nsis.installerHooks` in `src-tauri/tauri.conf.json`. The `CARGO_TARGET_DIR=/tmp/cargo_target` workaround is required because Windows GNU `dlltool` fails on paths containing spaces.
