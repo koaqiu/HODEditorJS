@@ -82,12 +82,14 @@ export function getExpectedTextureType(shaderName: string, mapIndex: number): st
 
 
 const PARAM_TO_SUFFIX: Record<string, string> = {
-  diffuse: "DIFF",
+  diff: "DIFF",
   normal: "NORM",
+  norm: "NORM",
   specular: "SPEC",
+  spec: "SPEC",
   glow: "GLOW",
   team: "TEAM",
-  diffuseoff: "DIFF_OFF",
+  diffoff: "DIFF_OFF",
   glowoff: "GLOW_OFF"
 };
 
