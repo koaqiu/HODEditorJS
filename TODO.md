@@ -57,8 +57,7 @@
 - [x] DXT3 Texture compatiblity
 - [x] Remove hardcoded nameplate.bmp texture
 - [x] Make the Viewport Layer toggles also toggle visibility on all nodes but also have options to toggle markers and joint nodes
-
-- [ ] Need to make sure all texture names have their proper _TYPE suffix both in editor and on saved/loaded HODs and exported materials/textures
+- [x] Need to make sure all texture names have their proper _TYPE suffix both in editor and on saved/loaded HODs and exported materials/textures
 
 - [ ] Editor works slow on bigger ships with many nodes, it seems to be rerendering everything on changing anything in the editor (node coordinate, node dragging, etc).
 
