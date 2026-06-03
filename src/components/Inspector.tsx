@@ -2798,11 +2798,10 @@ export const Inspector: React.FC<InspectorProps> = ({
               if (!group) return "";
               
               let expectedType = "";
-              if (slotLabel.includes("DIFF")) expectedType = "_DIFF";
-              else if (slotLabel.includes("GLOW")) expectedType = "_GLOW";
-              else if (slotLabel.includes("TEAM")) expectedType = "_TEAM";
-              else if (slotLabel.includes("NORM")) expectedType = "_NORM";
-              else if (slotLabel.includes("SPEC")) expectedType = "_SPEC";
+              const match = slotLabel.match(/\((.*?)\)/);
+              if (match) {
+                expectedType = "_" + match[1];
+              }
               
               const matchedTex = group.textures.find(t => t.type === expectedType);
               if (matchedTex) return matchedTex.originalName;
