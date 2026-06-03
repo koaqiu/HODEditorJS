@@ -754,6 +754,13 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
   1. Shrunk the base geometry parameters for `ConeGeometry` (used by dock points and markers) and clamped them using `Math.max` and `Math.min` relative to `scaleFactor`.
   2. Modified `updateGroupChildren` in `Viewport.tsx` to force `child.scale.set(1, 1, 1)` on gizmos (like `dockpoint:`, `marker:`, `navlight:`) right after matrix decomposition so they never inherit the massive game-engine joint scale.
 
+## 2026-06-03: Engine Glow LOD Visibility Fix
+* **What failed**: Engine Glows with multiple LODs were rendering simultaneously on load, causing visual overlap (z-fighting). Additionally, the viewport Layer checkbox for Engine Glows was incorrectly unchecked on load.
+* **Root Cause**: The visibility state initialized in `App.tsx` hid all `LOD > 0` elements, but the `isLayerVisible` check didn't exclude them when checking layer status, causing a "some are hidden" failure. Furthermore, toggling the layer checkbox or the Hierarchy Tree eye icon forced ALL LODs to become visible at once.
+* **What was fixed**: 
+  1. Updated `isLayerVisible` and `toggleLayer` in `App.tsx` to explicitly filter `item.lod === 0` for `engine_glows` exactly like standard `meshes`.
+  2. Modified `toggleNodeVisibility` in `HierarchyTree.tsx` to only set `nextVisibility` to `true` for LOD0 items, aggressively forcing LOD1+ items to `false` whenever an Engine Glow or Mesh node is toggled on.
+
 ## 2026-06-02: React Unmount Crash (Follow-up Fix)
 * **What failed**: The previous `<Fragment>` wrapper approach for the animation map in `HierarchyTree.tsx` was insufficient to prevent React's `NotFoundError` during `commitLayoutEffectOnFiber` when deleting the last animation.
 * **Root Cause**: React 18's reconciler can still lose track of node parentage when unmounting a mapped array of DOM elements wrapped only in a `<Fragment>` if it switches to a different DOM node entirely (from Fragment to a fallback div). Additionally, an identical conditional rendering issue existed in `AnimationDock.tsx` where an interactive `<select>` element was being hot-swapped with a `<span>` via a ternary operator upon the final animation's deletion.

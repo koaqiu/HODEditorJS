@@ -1395,24 +1395,24 @@ const handleDeleteNode = (name: string, type: string) => {
       
       const updated = { ...prev, [nodeKey]: nextVisibility };
       
-      // If toggling a mesh base name, toggle all its LODs
+      // If toggling a mesh base name, toggle only LOD0 and force other LODs to false
       if (!nodeKey.includes(":") && model?.meshes) {
         const baseName = nodeKey;
         model.meshes.forEach((m) => {
           const mBase = m.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
           if (mBase === baseName) {
-            updated[`${m.name}_lod_${m.lod}`] = nextVisibility;
+            updated[`${m.name}_lod_${m.lod}`] = m.lod === 0 ? nextVisibility : false;
           }
         });
       }
 
-      // If toggling an engine glow base name, toggle all its LODs
+      // If toggling an engine glow base name, toggle only LOD0 and force other LODs to false
       if (nodeKey.startsWith("engine_glow:") && model?.engine_glows) {
         const glowBaseName = nodeKey.substring("engine_glow:".length);
         model.engine_glows.forEach((g) => {
           const gBase = g.name.replace(/_lod_\d+$/i, "").replace(/_LOD\d+$/i, "");
           if (gBase === glowBaseName) {
-            updated[`engine_glow:${g.name}`] = nextVisibility;
+            updated[`engine_glow:${g.name}`] = g.lod === 0 ? nextVisibility : false;
           }
         });
       }

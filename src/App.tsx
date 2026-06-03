@@ -781,7 +781,7 @@ function App() {
 
   const isLayerVisible = (prefix: string, items: any[] | undefined) => {
     if (!items || items.length === 0) return false;
-    const targetItems = prefix === 'mesh' ? items.filter(item => item.lod === 0) : items;
+    const targetItems = (prefix === 'mesh' || prefix === 'engine_glow') ? items.filter(item => item.lod === 0) : items;
     if (targetItems.length === 0) return false;
     return targetItems.every(item => {
       let key = `${prefix}:${item.name}`;
@@ -792,14 +792,16 @@ function App() {
 
   const toggleLayer = (prefix: string, items: any[] | undefined, currentState: boolean) => {
     if (!items || items.length === 0) return;
-    const targetItems = prefix === 'mesh' ? items.filter(item => item.lod === 0) : items;
+    const targetItems = (prefix === 'mesh' || prefix === 'engine_glow') ? items.filter(item => item.lod === 0) : items;
     setVisibleMeshes(prev => {
       const updated = { ...prev };
-      // Force all LOD > 0 to be off if we are toggling meshes
-      if (prefix === 'mesh') {
+      // Force all LOD > 0 to be off if we are toggling meshes or engine glows
+      if (prefix === 'mesh' || prefix === 'engine_glow') {
         items.forEach(item => {
           if (item.lod > 0) {
-            updated[`${item.name}_lod_${item.lod}`] = false;
+            let key = `${prefix}:${item.name}`;
+            if (prefix === 'mesh') key = `${item.name}_lod_${item.lod}`;
+            updated[key] = false;
           }
         });
       }
