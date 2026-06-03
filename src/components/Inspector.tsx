@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { invoke } from "@tauri-apps/api/core";
 import { HODModel, Vector3D, HODNavLight, HODDockpoint } from "./Viewport";
 import { parseTextureGroups } from "../texture_utils";
-import { Info, Move, Navigation, Layers, Radio, Activity, Shield, Flame, RefreshCw, Palette, Download, Upload, Wrench, Plus, Eye, EyeOff, Box, Image, Trash2 } from "lucide-react";
+import { Info, Move, Navigation, Layers, Radio, Activity, Shield, Flame, RefreshCw, Palette, Download, Upload, Wrench, Plus, Eye, EyeOff, Box, Image, Trash2, FlipVertical } from "lucide-react";
 
 interface InspectorProps {
   model: HODModel | null;
@@ -11,7 +11,7 @@ interface InspectorProps {
   onPositionChange: (name: string, type: string, pos: Vector3D) => void;
   onModelChange?: (updatedModel: HODModel) => void;
   onSelectedNodeChange?: (node: { type: string; name: string } | null) => void;
-  selectedAnimIdx?: number;
+  selectedAnimIdx: number;
   visibleMeshes?: Record<string, boolean>;
   onToggleVisibility?: (meshKey: string) => void;
   setIsLoading?: React.Dispatch<React.SetStateAction<boolean>>;
@@ -2518,13 +2518,50 @@ export const Inspector: React.FC<InspectorProps> = ({
 
           // Update materials referencing this texture
           updatedMaterials = updatedMaterials.map(m => {
-            const newMaps = m.texture_maps.map(mapName => mapName === item.originalName ? newTexName : mapName);
-            return { ...m, texture_maps: newMaps };
+            let maps = [...(m.texture_maps || [])];
+            let changed = false;
+            maps.forEach((name, idx) => {
+              if (name === item.originalName) {
+                maps[idx] = newTexName;
+                changed = true;
+              }
+            });
+            return changed ? { ...m, texture_maps: maps } : m;
           });
         });
 
         onModelChange?.({ ...model, textures: updatedTextures, materials: updatedMaterials, textures_modified: true });
-        selectedNode.name = newName;
+        onSelectedNodeChange?.({ type: "texture_group", name: newName });
+      };
+
+      const handleToggleTextureFlip = (originalName: string) => {
+        const updatedTextures = model.textures.map(t => {
+          if (t.name === originalName) {
+            return { ...t, legacy_storage_y_flipped: !t.legacy_storage_y_flipped };
+          }
+          return t;
+        });
+        onModelChange?.({ ...model, textures: updatedTextures, textures_modified: true });
+      };
+
+      const handleRemoveTexture = (originalName: string) => {
+        if (!window.confirm(`Are you sure you want to remove the texture "${originalName}"?`)) return;
+        const updatedTextures = model.textures.filter(t => t.name !== originalName);
+        
+        // Remove from materials
+        const updatedMaterials = model.materials?.map(m => {
+           let maps = [...(m.texture_maps || [])];
+           let changed = false;
+           maps.forEach((name, idx) => {
+              if (name === originalName) {
+                 maps[idx] = "";
+                 changed = true;
+              }
+           });
+           return changed ? { ...m, texture_maps: maps } : m;
+        }) || [];
+
+        onModelChange?.({ ...model, textures: updatedTextures, materials: updatedMaterials, textures_modified: true });
       };
 
       const handleCompressionChange = (item: any, newCompression: string) => {
@@ -2612,6 +2649,30 @@ export const Inspector: React.FC<InspectorProps> = ({
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
                           <span>Size: {item.texture.width}x{item.texture.height}</span>
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            <button
+                              className="icon-button"
+                              onClick={() => handleToggleTextureFlip(item.originalName)}
+                              title="Toggle Y-Flip (legacy storage)"
+                              style={{ 
+                                padding: "2px 4px", 
+                                background: item.texture.legacy_storage_y_flipped ? "var(--accent-cyan)" : "rgba(255,255,255,0.05)",
+                                border: "1px solid rgba(255,255,255,0.1)", 
+                                borderRadius: "3px", 
+                                color: item.texture.legacy_storage_y_flipped ? "black" : "var(--text-primary)"
+                              }}
+                            >
+                              <FlipVertical size={12} />
+                            </button>
+                            <button
+                              className="icon-button"
+                              onClick={() => handleRemoveTexture(item.originalName)}
+                              title="Remove Texture"
+                              style={{ padding: "2px 4px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "3px", color: "#ff1744" }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Format:</span>

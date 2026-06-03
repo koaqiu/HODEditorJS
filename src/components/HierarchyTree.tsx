@@ -2985,6 +2985,7 @@ const handleDeleteNode = (name: string, type: string) => {
                             <div
                               key={group.baseName + "_" + idx}
                               onClick={() => setSelectedNode({ type: "texture_group", name: group.baseName })}
+                              onContextMenu={(e) => handleContextMenu(e, group.baseName, "texture_group")}
                               className={`list-item ${isSelected ? "active" : ""}`}
                               style={{
                                 padding: "6px 8px",
@@ -3900,7 +3901,58 @@ const handleDeleteNode = (name: string, type: string) => {
               flexDirection: 'column'
             }}
           >
-            {contextMenu.type === "texture" ? (
+            {contextMenu.type === "texture_group" ? (
+              <>
+                <div 
+                  className="list-item"
+                  style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}
+                  onClick={() => {
+                     handleRenameNode(contextMenu.name, contextMenu.type);
+                     setContextMenu(null);
+                  }}
+                >
+                  ✏️ Rename Group
+                </div>
+                <div 
+                  className="list-item"
+                  style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '12px', color: '#ff1744', display: 'flex', alignItems: 'center' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!model) return;
+                    
+                    const groups = parseTextureGroups(model.textures || []);
+                    const group = groups.find(g => g.baseName === contextMenu.name);
+                    if (!group) return;
+
+                    if (!window.confirm(`Are you sure you want to delete the texture group '${group.baseName}' and all its ${group.textures.length} sub-textures?`)) return;
+
+                    const groupTextureNames = new Set(group.textures.map(t => t.originalName));
+                    const updatedTextures = model.textures.filter(t => !groupTextureNames.has(t.name));
+                    
+                    const updatedMaterials = model.materials?.map(m => {
+                       let maps = [...(m.texture_maps || [])];
+                       let changed = false;
+                       maps.forEach((name, idx) => {
+                          if (groupTextureNames.has(name)) {
+                             maps[idx] = "";
+                             changed = true;
+                          }
+                       });
+                       return changed ? { ...m, texture_maps: maps } : m;
+                    }) || [];
+
+                    onModelChange?.({ ...model, textures: updatedTextures, materials: updatedMaterials, textures_modified: true });
+                    if (selectedNode?.name === contextMenu.name) {
+                      setSelectedNode(null);
+                    }
+                    setContextMenu(null);
+                  }}
+                >
+                  <Trash2 size={12} style={{ marginRight: 6 }} />
+                  Delete Texture Group
+                </div>
+              </>
+            ) : contextMenu.type === "texture" ? (
               <>
                 <div 
                   className="list-item"
