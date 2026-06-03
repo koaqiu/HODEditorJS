@@ -457,6 +457,15 @@ export const Viewport: React.FC<ViewportProps> = ({
         const newMatrix = animatedWorldMatrix.clone().multiply(baseMatrix);
         child.matrix.copy(newMatrix);
         child.matrix.decompose(child.position, child.quaternion, child.scale);
+        
+        // Prevent visual helper gizmos from becoming massive due to joint scale
+        if (child.name.startsWith("dockpoint:") || 
+            child.name.startsWith("marker:") || 
+            child.name.startsWith("navlight:") || 
+            child.name.startsWith("engine_burn:")) {
+          child.scale.set(1, 1, 1);
+        }
+
         child.matrixWorldNeedsUpdate = true;
       });
     };
@@ -1574,7 +1583,9 @@ export const Viewport: React.FC<ViewportProps> = ({
       invoke("log_event", { level: "INFO", message: `Viewport: Joint rendering complete. Rendering ${model.markers.length} markers...` }).catch(console.error);
 
       // 4. Render markers using scaleFactor
-      const markerGeo = new THREE.ConeGeometry(0.08 * scaleFactor, 0.35 * scaleFactor, 8);
+      const mr = Math.max(0.1, Math.min(2.5, 0.05 * scaleFactor));
+      const mh = Math.max(0.4, Math.min(6.0, 0.2 * scaleFactor));
+      const markerGeo = new THREE.ConeGeometry(mr, mh, 8);
       markerGeo.rotateX(Math.PI / 2); // Point forward along Z
       const markerMat = new THREE.MeshBasicMaterial({ 
         color: "#00d2ff", 
@@ -1705,7 +1716,9 @@ export const Viewport: React.FC<ViewportProps> = ({
 
             pointsInWorld.push(ptPos);
 
-            const pyramidGeo = new THREE.ConeGeometry(0.15 * scaleFactor, 0.4 * scaleFactor, 4);
+            const pr = Math.max(0.2, Math.min(4.0, 0.06 * scaleFactor));
+            const ph = Math.max(0.5, Math.min(10.0, 0.15 * scaleFactor));
+            const pyramidGeo = new THREE.ConeGeometry(pr, ph, 4);
             pyramidGeo.rotateX(Math.PI / 2);
 
             const pyramidMat = new THREE.MeshBasicMaterial({

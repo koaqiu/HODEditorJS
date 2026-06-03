@@ -167,7 +167,7 @@ pub struct HODDockpath {
     pub val4: u32,
     pub val5: u32,
     pub compatible_ships: String,
-    pub padding1: String,
+    pub padding1: u32,
     pub padding2: String,
 }
 
@@ -3563,7 +3563,7 @@ fn parse_dock_extended(data: &[u8]) -> Result<Vec<HODDockpath>, String> {
         let val4 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
         let val5 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
         let compatible_ships = read_len_string(&mut r)?;
-        let padding1 = read_len_string(&mut r)?;
+        let padding1 = r.read_u32::<LittleEndian>().map_err(|e| e.to_string())?;
         let padding2 = read_len_string(&mut r)?;
         let num_points = r.read_i32::<LittleEndian>().map_err(|e| e.to_string())?;
         if num_points < 0 {
@@ -3663,7 +3663,7 @@ fn parse_dock_legacy_with_layout(
             val4: 0,
             val5: 0,
             compatible_ships: String::new(),
-            padding1: String::new(),
+            padding1: 0,
             padding2: String::new(),
         });
     }
@@ -6100,7 +6100,9 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
                 .write_u32::<LittleEndian>(path.val5)
                 .map_err(|e| e.to_string())?;
             write_len_string(&mut dock_data, &path.compatible_ships)?;
-            write_len_string(&mut dock_data, &path.padding1)?;
+            dock_data
+                .write_u32::<LittleEndian>(path.padding1)
+                .map_err(|e| e.to_string())?;
             write_len_string(&mut dock_data, &path.padding2)?;
             dock_data
                 .write_i32::<LittleEndian>(path.points.len() as i32)
@@ -7065,7 +7067,9 @@ pub fn save_edits(original_bytes: &[u8], updated_model: &HODModel) -> Result<Vec
                         .write_u32::<LittleEndian>(path.val5)
                         .map_err(|e| e.to_string())?;
                     write_len_string(&mut paths_payload, &path.compatible_ships)?;
-                    write_len_string(&mut paths_payload, &path.padding1)?;
+                    paths_payload
+                        .write_u32::<LittleEndian>(path.padding1)
+                        .map_err(|e| e.to_string())?;
                     write_len_string(&mut paths_payload, &path.padding2)?;
                     paths_payload
                         .write_i32::<LittleEndian>(path.points.len() as i32)

@@ -743,9 +743,16 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 
 ## 2026-06-03: HWRM Dockpath Parser Fix
 * **What failed**: The parser failed to read `DOCK` chunks from `hgn_carrier.hod`, reporting `extended layout failed: failed to fill whole buffer`. This caused zero dockpaths to appear in the app.
-* **Root Cause**: The parser assumed the `padding1` and `padding2` fields in the dockpath layout were `u32` integers and incorrectly applied a version/count check logic (`first_val >= 10`). In reality, `padding1` and `padding2` are standard string fields in the HOD spec (e.g. `dockpath_flags` or `link_paths`), which happened to be length 0 in small ships but had data in the Carrier (e.g., `"path6, path12, path13"`), causing massive byte-offset misalignments when read as numbers.
-* **What was fixed**: Removed the invalid `first_val >= 10` check. Updated `HODDockpath` struct in `hod.rs` to treat `padding1` and `padding2` as `String` and parse/serialize them using `read_len_string`/`write_len_string`.
-* **Verification**: `verify_lossless` successfully parses `Parsed carrier! Dockpaths: 12`. The frontend `HODDockpath` TS interface safely ignores these newly exposed string properties.
+* **Root Cause**: The parser assumed the `padding1` and `padding2` fields in the dockpath layout were `u32` integers and incorrectly applied a version/count check logic (`first_val >= 10`). In reality, **`padding1` is a `u32` integer** (likely flags or link count), while **`padding2` is a standard string field** (representing `link_paths`). For small ships, this string is length 0, which masqueraded perfectly as `u32` padding. But for Capital Ships like the Carrier or Mothership, the `link_paths` field contains data like `"path6, path12, path13"`. Parsing the length prefix as a `u32` caused catastrophic byte-offset misalignments.
+* **What was fixed**: Removed the invalid `first_val >= 10` check. Updated `HODDockpath` struct in `hod.rs` to treat `padding1` as `u32` and `padding2` as `String`, and parse/serialize them accordingly.
+* **Verification**: `verify_lossless` successfully parses `Parsed carrier! Dockpaths: 12` and `Parsed mothership! Dockpaths: 18`. The frontend `HODDockpath` TS interface safely ignores these newly exposed string properties.
+
+## 2026-06-03: Viewport Gizmo Scaling Fix
+* **What failed**: Capital ship models like the Mothership caused editor gizmos (dockpaths, markers) to appear as massive triangles/cones that obstructed the view.
+* **Root Cause**: The editor's animation loop applied the underlying `THREE.Matrix4` joint scale directly to the gizmo meshes. Since Homeworld engine scales up internal root joints for large ships, the gizmos inflated massively.
+* **What was fixed**: 
+  1. Shrunk the base geometry parameters for `ConeGeometry` (used by dock points and markers) and clamped them using `Math.max` and `Math.min` relative to `scaleFactor`.
+  2. Modified `updateGroupChildren` in `Viewport.tsx` to force `child.scale.set(1, 1, 1)` on gizmos (like `dockpoint:`, `marker:`, `navlight:`) right after matrix decomposition so they never inherit the massive game-engine joint scale.
 
 ## 2026-06-02: React Unmount Crash (Follow-up Fix)
 * **What failed**: The previous `<Fragment>` wrapper approach for the animation map in `HierarchyTree.tsx` was insufficient to prevent React's `NotFoundError` during `commitLayoutEffectOnFiber` when deleting the last animation.

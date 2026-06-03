@@ -34,16 +34,16 @@ Throughout the reverse engineering process, several critical quirks regarding th
   * ## DOCK Chunks
 
   Dockpaths in `HWRM` ships use an extended structure that includes multiple length-prefixed strings.
-  Previously, reverse-engineering efforts assumed `padding1` and `padding2` fields were `u32` integer blocks. They are, in fact, **length-prefixed strings** (representing fields like `dockpath_flags` or `link_paths`).
+  Previously, reverse-engineering efforts assumed `padding1` and `padding2` fields were `u32` integer blocks. In reality, **`padding1` is a `u32` integer** (likely flags or a link count), while **`padding2` is a length-prefixed string** (representing `link_paths`).
 
-  For small ships (e.g. Fighters/Corvettes), these string fields are empty, resulting in `00 00 00 00` lengths, which masqueraded perfectly as `u32` integer padding. However, for Capital Ships like the Carrier (`hgn_carrier.hod`), the `link_paths` field contains data like `"path6, path12, path13"`. Parsing this as a `u32` caused catastrophic buffer misalignment resulting in `failed to fill whole buffer`.
+  For small ships (e.g. Fighters/Corvettes), the `link_paths` string is empty, resulting in `00 00 00 00` length, which masqueraded perfectly as `u32` integer padding. However, for Capital Ships like the Carrier or Mothership, `padding1` may be `1`, and the `link_paths` field contains data like `"path6, path12, path13"`. Parsing the string length as a `u32` caused catastrophic buffer misalignment.
 
   **Structure:**
   * `name` (String)
   * `parent_name` (String)
   * `val1` through `val5` (5x `u32`)
   * `compatible_ships` (String)
-  * `padding1` (String - often empty)
+  * `padding1` (`u32` - possibly flags or link count)
   * `padding2` (String - link paths, e.g. "path6, path12")
   * `num_points` (`i32`)
   * `points` (Array)
