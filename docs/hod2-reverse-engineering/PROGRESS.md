@@ -7,6 +7,7 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 ---
 
 ## Current Status
+- ✅ Dynamic Shader Scanning & Texture Mapping: Overhauled the shader parameter scanning to correctly parse `inTex` variables natively used in HWRM `.prog` and `.fx` pipelines (rather than offline `$param` configs). UI now dynamically extracts expected texture suffixes (e.g. `_SCORCHED`, `_ENV0`) straight from the rendered slot labels, allowing completely custom modder shaders to assign textures flawlessly through the "Texture Group" dropdown without any hardcoded engine logic. Resolved path resolution edge-cases in the Setup Wizard for directories ending in `shaders`.
 - ✅ Improved DXT Block Compression Quality: Replaced the parser's custom naive DXT block compressor (which caused heavy color banding and artifacts) with the production-grade `texpresso` Rust crate. This ensures DXT1/3/5 compression closely matches original engine authoring quality.
 - ✅ Improved Texture Compression/Mipmaps: Fixed severe aliasing/blockiness by rewriting the `generate_mip_chain` function to use `Lanczos3` image filtering instead of a manual 2x2 box filter. Also bumped the `png_data` size limit from 1024 to 8192, ensuring 2K and 4K textures are no longer artificially downscaled when parsed.
 - ✅ Manual Texture Re-classification: Updated the Texture Group Inspector to render the sub-texture type (e.g. `_DIFF`, `_GLOW`) as a dropdown instead of static text. Users can now manually re-classify a texture from one known type to another. Doing so will automatically rename the underlying texture payload and update all referencing materials.
@@ -820,3 +821,12 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
 * **Verification**: Created `parser/examples/test_rust_roundtrip.rs` that loads the original 2.0 file, immediately saves it via `generate_v2_from_model`, and compares BURN data. Result: **perfectly lossless** — all 4 BURN chunks have identical names, parent names, and vertex coordinates through the Rust parse→serialize cycle.
 * **Key insight**: BURN vertices are stored in local space relative to their `parent_name` joint. The vertices themselves are never transformed during parse or serialize (confirmed at `hod.rs:800-854` for parse, `hod.rs:5695-5719` for serialize). The rotation issue was purely from the frontend changing which joint the BURN was parented to.
 * **Decisions made**: The `sanitizeNavLightChildren` function was well-intentioned (trying to decouple NavLight joints from other children) but fundamentally flawed — in HOD 2.0, it's valid for joints like `EngineNozzle` to serve dual purposes as both NavLight positions and BURN parents. The Rust backend already handles this correctly.
+
+## 2026-06-03: Dynamic Shader Parsing and Texture Assignment
+* **What failed**: The parser for dynamic shader parameters failed to identify HWRM texture mappings because it relied on an offline `SHADERS.MAP` regex (`\$[a-zA-Z0-9_]+`) instead of the actual `inTex([A-Za-z0-9_]+)` variable format used in `.prog` and `.fx` files. Also, the Setup Wizard shader directory resolution caused empty paths if the user directly selected the "shaders" directory.
+* **Fix**: 
+  1. Updated the Rust regex scanner in `src-tauri/src/lib.rs` to parse `inTex` variables (e.g. `inTexDiff`, `inTexGlow`) instead of `$param`. 
+  2. Fixed intelligent path resolution in `get_shader_pipelines` and `get_dynamic_shader_slots` to handle paths that already terminate in `shaders` without appending duplicate paths.
+  3. Replaced hardcoded `if/else` texture mapping rules in `Inspector.tsx` (`handleTextureGroupChange`) with dynamic regex suffix extraction from the UI labels.
+  4. Updated `PARAM_TO_SUFFIX` mapping to translate shader parameters `diffoff` and `glowoff` to their canonical modding suffixes `_DIFX` and `_GLOWX`.
+* **Verification**: HWRM `.prog` files are now successfully scanned, discovering custom mapping types (e.g., `_SCORCHED`, `_ENV0`). The Texture Group assignment perfectly applies these textures to their dynamic shader slots automatically.
