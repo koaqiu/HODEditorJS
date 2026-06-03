@@ -438,15 +438,22 @@ fn get_dynamic_shader_slots(keeper_paths: Vec<String>) -> Result<Vec<ShaderInfo>
     use regex::Regex;
     let mut shaders = HashMap::new();
     
-    // We match $param or things that look like texture params
-    let re = Regex::new(r"\$([a-zA-Z0-9_]+)").map_err(|e| e.to_string())?;
+    // We match inTexParam
+    let re = Regex::new(r"inTex([a-zA-Z0-9_]+)").map_err(|e| e.to_string())?;
 
     for path_str in &keeper_paths {
         let keeper_dir = std::path::Path::new(path_str);
+        
+        let shaders_base = if keeper_dir.ends_with("shaders") {
+            keeper_dir.to_path_buf()
+        } else {
+            keeper_dir.join("shaders")
+        };
+        
         // Sometimes they are in shaders/ or shaders/gl_prog/
         let dirs_to_check = [
-            keeper_dir.join("shaders"),
-            keeper_dir.join("shaders").join("gl_prog"),
+            shaders_base.clone(),
+            shaders_base.join("gl_prog"),
         ];
 
         for dir in &dirs_to_check {
@@ -514,7 +521,14 @@ fn get_shader_pipelines(keeper_paths: Vec<String>) -> Result<Vec<String>, String
 
     for path_str in &keeper_paths {
         let keeper_dir = std::path::Path::new(path_str);
-        let shaders_dir = keeper_dir.join("shaders").join("gl_prog");
+        
+        let shaders_base = if keeper_dir.ends_with("shaders") {
+            keeper_dir.to_path_buf()
+        } else {
+            keeper_dir.join("shaders")
+        };
+        
+        let shaders_dir = shaders_base.join("gl_prog");
         write_log("INFO", &format!("Looking for shaders in: {:?}", shaders_dir));
         if shaders_dir.is_dir() {
             if let Ok(entries) = fs::read_dir(&shaders_dir) {
