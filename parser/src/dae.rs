@@ -86,9 +86,9 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
                     })
             })
     }) {
-        material_names.push("unnamed.bmp".to_string());
+        material_names.push("unknown".to_string());
         model.materials.push(HODMaterial {
-            name: "unnamed.bmp".to_string(),
+            name: "unknown".to_string(),
             shader_name: "default".to_string(),
             texture_maps: Vec::new(),
             parameters: Vec::new(),
@@ -150,7 +150,7 @@ pub fn parse_dae(xml_str: &str) -> Result<HODModel, String> {
                     indices: Vec::new(),
                 };
 
-                let mat = triangles.attribute("material").unwrap_or("unnamed.bmp");
+                let mat = triangles.attribute("material").unwrap_or("unknown");
                 if let Some(idx) = material_names.iter().position(|m| m == mat) {
                     mesh_part.material_index = idx;
                 }
