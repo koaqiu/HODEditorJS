@@ -634,7 +634,7 @@ function App() {
   };
 
   // Update selected joint/marker/navlight/dockpoint/collision position in model state
-  const handleNodeTransform = (name: string, type: string, pos: Vector3D, localMatrix?: { m: number[][] }) => {
+  const handleNodeTransform = (name: string, type: string, pos: Vector3D, localMatrix?: { m: number[][] }, localQuat?: { x: number, y: number, z: number, w: number }, localEuler?: Vector3D) => {
     if (!model) return;
 
     if (type === "joint" || type === "engine_nozzle") {
@@ -731,6 +731,33 @@ function App() {
         return col;
       });
       updateModel({ ...model, collision_meshes: updatedCols });
+    } else if (type === "keyframe") {
+      const [jointName, kfIdxStr] = name.split(":");
+      const kfIdx = parseInt(kfIdxStr, 10);
+      const updatedAnims = [...(model.animations || [])];
+      if (updatedAnims[selectedAnimIdx]) {
+        const anim = { ...updatedAnims[selectedAnimIdx] };
+        const updatedTracks = anim.tracks.map((track) => {
+          if (track.joint_name.toLowerCase() === jointName.toLowerCase()) {
+            const updatedKfs = track.keyframes.map((kf, i) => {
+              if (i === kfIdx) {
+                return { 
+                  ...kf, 
+                  position: pos, 
+                  rotation: localQuat || kf.rotation, 
+                  rotation_euler: localEuler || kf.rotation_euler 
+                };
+              }
+              return kf;
+            });
+            return { ...track, keyframes: updatedKfs };
+          }
+          return track;
+        });
+        anim.tracks = updatedTracks;
+        updatedAnims[selectedAnimIdx] = anim;
+        updateModel({ ...model, animations: updatedAnims });
+      }
     }
     
     setStatusMsg(`Moved ${type} ${name} to [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`);

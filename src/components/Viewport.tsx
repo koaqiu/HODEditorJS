@@ -181,7 +181,7 @@ interface ViewportProps {
   setSelectedNode: (node: { type: string; name: string } | null) => void;
   transformMode: "translate" | "rotate" | "scale";
   setTransformMode: (mode: "translate" | "rotate" | "scale") => void;
-  onNodeTransform: (name: string, type: string, position: Vector3D, localMatrix?: Matrix4D) => void;
+  onNodeTransform: (name: string, type: string, position: Vector3D, localMatrix?: Matrix4D, localQuat?: { x: number, y: number, z: number, w: number }, localEuler?: Vector3D) => void;
   visibleMeshes: Record<string, boolean>;
   showBoneLines: boolean;
   renderMode: "untextured" | "textured" | "shaded" | "wireframe" | "shaded_team" | "textured_team";
@@ -615,6 +615,10 @@ export const Viewport: React.FC<ViewportProps> = ({
     } else if (selectedType === "engine_shape") {
       const shape = currentModel?.engine_shapes.find(s => s.name.toLowerCase() === selectedName.toLowerCase());
       parentName = shape?.parent_name || "";
+    } else if (selectedType === "keyframe") {
+      const jointName = selectedName.split(":")[0];
+      const joint = currentModel?.joints.find(j => j.name.toLowerCase() === jointName.toLowerCase());
+      parentName = joint?.parent_name || "";
     }
 
     if (parentName && parentName.toLowerCase() !== "root") {
@@ -770,6 +774,10 @@ export const Viewport: React.FC<ViewportProps> = ({
           } else if (activeNode.type === "engine_burn") {
             const burn = currentModel?.engine_burns.find(b => b.name.toLowerCase() === activeNode.name.toLowerCase());
             parentName = burn?.parent_name || "";
+          } else if (activeNode.type === "keyframe") {
+            const jointName = activeNode.name.split(":")[0];
+            const joint = currentModel?.joints.find(j => j.name.toLowerCase() === jointName.toLowerCase());
+            parentName = joint?.parent_name || "";
           }
           
           let localMat = obj.matrix.clone();
@@ -778,6 +786,12 @@ export const Viewport: React.FC<ViewportProps> = ({
             const invParent = parentMatrix.clone().invert();
             localMat = invParent.multiply(obj.matrix);
           }
+          
+          const dPos = new THREE.Vector3();
+          const dQuat = new THREE.Quaternion();
+          const dScale = new THREE.Vector3();
+          safeDecompose(localMat, dPos, dQuat, dScale);
+          const dEuler = new THREE.Euler().setFromQuaternion(dQuat, "YXZ");
           
           const localMatrix: Matrix4D = {
             m: [
@@ -789,7 +803,14 @@ export const Viewport: React.FC<ViewportProps> = ({
           };
 
           if (onNodeTransformRef.current) {
-            onNodeTransformRef.current(activeNode.name, activeNode.type, localPos, localMatrix);
+            onNodeTransformRef.current(
+              activeNode.name, 
+              activeNode.type, 
+              localPos, 
+              localMatrix,
+              { x: dQuat.x, y: dQuat.y, z: dQuat.z, w: dQuat.w },
+              { x: dEuler.x, y: dEuler.y, z: dEuler.z }
+            );
           }
         }
       });
@@ -2279,6 +2300,9 @@ export const Viewport: React.FC<ViewportProps> = ({
         targetObj = engineGlowsGroupRef.current?.children.find(c => c.name.toLowerCase() === `engine_glow:${selectedNode.name}`.toLowerCase());
       } else if (selectedNode.type === "engine_shape") {
         targetObj = engineShapesGroupRef.current?.children.find(c => c.name.toLowerCase() === `engine_shape:${selectedNode.name}`.toLowerCase());
+      } else if (selectedNode.type === "keyframe") {
+        const jointName = selectedNode.name.split(":")[0];
+        targetObj = jointsGroup.children.find(c => c.name.toLowerCase() === `joint:${jointName}`.toLowerCase());
       }
 
       invoke("log_event", {
