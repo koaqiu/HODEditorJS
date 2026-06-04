@@ -830,3 +830,14 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
   3. Replaced hardcoded `if/else` texture mapping rules in `Inspector.tsx` (`handleTextureGroupChange`) with dynamic regex suffix extraction from the UI labels.
   4. Updated `PARAM_TO_SUFFIX` mapping to translate shader parameters `diffoff` and `glowoff` to their canonical modding suffixes `_DIFX` and `_GLOWX`.
 * **Verification**: HWRM `.prog` files are now successfully scanned, discovering custom mapping types (e.g., `_SCORCHED`, `_ENV0`). The Texture Group assignment perfectly applies these textures to their dynamic shader slots automatically.
+
+## 2026-06-03: Weapon Assembly Refactoring
+* **Request**: Recreate Weapon Assemblies from the old "weapon_group" and "turret_group" logic. Instead, create a unified "Weapon Assembly" template that reads properly from HODs.
+* **Rules applied**:
+  - `Position`: Obligatory. Shoots from itself if `Muzzle` is missing.
+  - `Muzzle`: Optional. Spawn point, fires towards +Z.
+  - `Direction`: Optional. Tracking reference, placed +Y.
+  - `Latitude`: Optional. Pitch pivot, placed +Y, parent of `Muzzle` when active.
+  - `Rest`: Optional. Yaw pivot, placed +Z.
+* **Fix**: Built a new `WeaponGroupInspector` inside `Inspector.tsx` that replaces the old separate logic. It detects existing components by parsing joint suffix names (e.g. `_Latitude`, `_Muzzle`). You can dynamically toggle the presence of `Muzzle`, `Direction`, `Latitude`, and `Rest` joints, which injects/removes them from the `HODModel`. When `Latitude` is toggled on, `Muzzle` is automatically reparented to `Latitude`, otherwise it reparents to `Direction` (if active) or `Position`. Also updated `HierarchyTree.tsx` to handle dragging logic, ensuring users cannot drag internal child components of a weapon assembly independently but can drag the weapon assembly base wrapper `Weapon_Name` to reparent the whole group together seamlessly.
+* **Verification**: `npm run build` PASS, the frontend complies and handles the generic fallback assembly perfectly.

@@ -59,18 +59,14 @@
 - [x] Make the Viewport Layer toggles also toggle visibility on all nodes but also have options to toggle markers and joint nodes
 - [x] Need to make sure all texture names have their proper _TYPE suffix both in editor and on saved/loaded HODs and exported materials/textures
 - [x] Textures lose their "smoothness" when saving, in game they render blocky
+- [x] Recreate Weapon Assembly
 
-- [ ] reintroduce Badges
-
+- [ ] Proper GLOW and SPEC texture generation
+- [ ] Drag based positioning / rotating in viewport (disable camera control with left click, leave it for right click)
 - [ ] Fix DAE parsing
-- [ ] Editor works slow on bigger ships with many nodes, it seems to be rerendering everything on changing anything in the editor (node coordinate, node dragging, etc).
-
 
 - [ ] Fix auto camera distance on loading model
-- [ ] Drag based positioning / rotating in viewport (disable camera control with left click, leave it for right click)
-- [ ] Proper GLOW and SPEC texture generation
 - [ ] LOD mesh generation
-
 - [ ] Render shaders same as in game
 - [ ] Saving as HW2 Classic HOD (Actual HOD 1.0)
 - [ ] Saving as HOD 1.3 (correct name, not HOD 1.0)

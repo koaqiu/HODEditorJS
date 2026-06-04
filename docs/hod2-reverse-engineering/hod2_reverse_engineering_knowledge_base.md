@@ -115,3 +115,84 @@ cargo check --lib --manifest-path parser/Cargo.toml
 ```
 
 **Windows runtime note:** `meshopt 0.6.2` links `libstdc++` dynamically via `cc-rs`, so the NSIS installer bundles `libstdc++-6.dll`, `libgcc_s_seh-1.dll`, and `libwinpthread-1.dll` via `src-tauri/windows/nsis-hooks.nsh`. This hook is wired through `bundle.windows.nsis.installerHooks` in `src-tauri/tauri.conf.json`. The `CARGO_TARGET_DIR=/tmp/cargo_target` workaround is required because Windows GNU `dlltool` fails on paths containing spaces.
+
+## 6. Weapon Assemblies & Turret Hierarchies
+
+In Homeworld Remastered, the weapon joint tree in a `.hod` file defines where a weapon is placed, how it rotates, and exactly where projectiles and visual effects originate from. The game engine reads this hierarchy to animate turrets dynamically based on target tracking.
+
+Depending on the weapon type defined in the `.wepn` file (`"Fixed"`, `"Gimbal"`, or `"AnimatedTurret"`), the required joint hierarchy changes.
+
+### 1. Fixed Weapons
+For weapons that do not visually rotate (e.g., forward-facing interceptor guns, fixed ion cannons), you only need a single joint in the `.hod` file.
+*   **Naming:** Typically named something like `Weapon_Gun0`.
+*   **Orientation:** The Z-axis of the joint determines the direction the weapon fires.
+*   **Scripting:** In the `.ship` file, both the base and muzzle arguments point to the same joint: `StartShipWeaponConfig(NewShipType, "Kus_FighterGun", "Weapon_Gun0", "Weapon_Gun0")`
+
+### 2. Gimbal Weapons (Cone Aiming, No Animation)
+A `"Gimbal"` weapon can track targets and fire in an arc/cone, but it does not visibly move any parts of the 3D model. Because it doesn't need to rotate a mesh, it does not require a complex hierarchy.
+*   **The Joint Structure:** Like a `"Fixed"` weapon, a Gimbal weapon typically only requires a single joint (e.g., `Weapon_Gun0`) in the `.hod` file.
+*   **Behavior:** The engine rotates the firing vector internally based on the weapon's firing cone, without modifying the visual rotation of the ship's geometry.
+
+### 3. Animated Turrets (The 3-Joint Hierarchy)
+For weapons that need to track targets visually (turrets that rotate horizontally and pitch vertically), the HOD requires a specific three-joint hierarchy. This can be configured in two ways: as a deep parent-child chain, or as a flat sibling structure.
+
+**Option A: Deep Parent-Child Hierarchy**
+1.  **Base/Position Joint** (e.g., `Weapon_Turret1_Position`) - Rigidly attached to the hull.
+2.  **Rest/Azimuth Joint** (e.g., `Weapon_Turret1_Rest`) - Child of Position. Handles yaw.
+3.  **Muzzle/Elevation Joint** (e.g., `Weapon_Turret1_Muzzle`) - Child of Rest. Handles pitch and projectile spawning.
+
+**Option B: Flat Sibling Hierarchy (Vanilla HWRM Standard)**
+Many vanilla ships (like the Hiigaran Destroyer) use a flattened hierarchy where `Rest`, `Muzzle`, and an optional `Direction` joint are all **direct children (siblings)** of the `Position` joint.
+*   `Weapon_Torpedo_Position` (Parent)
+    *   `Weapon_Torpedo_Direction` (Child, sibling to Rest/Muzzle)
+    *   `Weapon_Torpedo_Rest` (Child, sibling to Direction/Muzzle)
+    *   `Weapon_Torpedo_Muzzle` (Child, sibling to Direction/Rest)
+
+**Option C: The "Latitude" Pitch Configuration (Taiidan / HW1 Legacy)**
+In some legacy ports like the Taiidan Assault Frigate, pitch is decoupled from the muzzle:
+*   `Weapon_Gun1_Position`
+    *   `Weapon_Gun1_Rest` (Sibling, handles Yaw)
+    *   `Weapon_Gun1_Latitude` (Sibling, handles Pitch)
+        *   `Weapon_Gun1_Muzzle` (Child of Latitude, handles projectile spawning only)
+
+### 3.1 The Modular IK Solver (Optional Joints)
+The HWRM engine's turret solver is highly modular. Because joints like `_Latitude`, `_Direction`, and `_Rest` are optional, the engine scales its animation logic based on what it finds by scanning string names:
+*   **Missing `_Rest`:** The engine assumes the default idle forward vector is the local Z-axis of the `Position` joint.
+*   **Missing `_Latitude` but keeping `_Direction`:** If a turret rotates horizontally but doesn't tilt vertically (like a basic radar dish), you might see `Position -> [Direction, Muzzle]`. The engine will spin the turret left/right on `_Direction` but won't attempt to calculate pitch.
+*   **`Position -> Muzzle` (The Minimal Setup):** If there are no moving parts to animate, `Muzzle` can be a direct child of `Position`. The engine simply spawns the projectile at `Muzzle` and fires, bypassing the IK solver entirely.
+
+**Scripting:** When attaching a turret in the `.ship` file, pass the Base joint as the 3rd argument, and the Muzzle joint as the 4th argument:
+`StartShipWeaponConfig(NewShipType, "Hgn_KineticTurret", "Weapon_Turret1_Position", "Weapon_Turret1_Muzzle")`
+*(Note: The engine automatically builds the IK chain by scanning for `_Rest`, `_Latitude`, etc., between the Position and Muzzle references!)*
+
+### 3.2 The Absolute Truth on Joint Placement
+When authoring these joints in a 3D package (like Blender/Maya), their spatial positioning relative to the `Position` node dictates how the engine interprets the turret's geometry:
+*   **Position:** (Obligatory) The root weapon position on the HOD. If no `Muzzle` is provided (e.g., for simple Gimbal weapons), the weapon will shoot directly from the Position node.
+*   **Muzzle:** (Optional but Standard) The weapon projectile spawn point. It fires towards its **+Z vector**. It is normally positioned **+Z** (forward) of the Position node (and `Latitude`/`Rest` nodes).
+*   **Direction:** (Optional) Typically placed **+Y** (above) of the Position node to establish the weapon's upward/forward tracking reference vector.
+*   **Latitude:** (Optional) The pitch pivot. If used, it is typically the parent of the Muzzle and is placed **+Y** (above) the Position node where the gun barrels hinge.
+*   **Rest:** (Optional) The yaw pivot. Typically placed **+Z** (forward) or exactly at the origin of the Position node.
+
+### 4. Multi-Barrel Turrets
+If a turret has multiple barrels (e.g., a dual-barrel flak cannon) that fire in sequence, they still share the same Base and Rest joints, but you create multiple Muzzle joints side-by-side as siblings of the Rest joint.
+**Scripting:** Call `StartShipWeaponConfig` twice, binding the same weapon script to the different muzzles. The engine handles the alternating firing sequence natively.
+
+### Important Gotchas
+*   **LoadModel Order:** As with all hardpoints and weapons, `LoadModel()` **MUST** be called in the `.ship` file before `StartShipWeaponConfig`. If the engine tries to attach a weapon to a joint before the HOD is loaded into memory, the game will crash.
+*   **Axis Orientation:** In the 3D software (Blender/Maya), the **Z-axis** of the Muzzle joint must point in the direction of fire, and the **Y-axis** is typically "up" relative to the turret.
+
+### Summary of Differences
+
+| Weapon Type (`.wepn`) | Aiming Behavior | HOD Joint Requirement | Visual Model Movement |
+| :--- | :--- | :--- | :--- |
+| `"Fixed"` | Fires exclusively straight ahead. | 1 Joint (Muzzle) | None |
+| `"Gimbal"` | Fires in a cone, tracking targets. | 1 Joint (Muzzle) | None |
+| `"AnimatedTurret"` | Fires in a cone, tracking targets. | 3 Joints (Base, Rest, Muzzle) | Turret rotates and elevates |
+
+> [!WARNING]
+> If you attempt to use an `"AnimatedTurret"` weapon script but only provide a single joint in the `.ship` config (like `"Weapon_Gun0", "Weapon_Gun0"`), the engine will usually crash or fail to fire because it attempts to traverse the missing child `_Rest` and `_Muzzle` joints. Using a `"Gimbal"` weapon prevents this crash while still allowing the weapon to track targets.
+
+## 7. Badges and Decals
+Badges (player insignias) are implemented as distinct `Material` blocks where the shader name is explicitly set to `"badge"`. 
+*   **Texture Mapping:** Despite acting as a decal, vanilla HOD 2.0 files assign the **exact same 4 texture maps** (Diffuse, Glow, Team, Normal) to the badge material as they do to the main ship hull.
+*   **Geometry:** The badge geometry must be separated into a distinct mesh part (sub-mesh) assigned to the material index of the badge material. The engine takes the player's selected badge graphic, applies it to the UVs of that specific mesh part, and uses the assigned 4 hull textures to composite the badge onto the ship's lighting environment.

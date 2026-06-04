@@ -458,18 +458,11 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
 
   // Weapon Grouping helpers
   const getWeaponGroupInfo = (name: string) => {
-    // Check weapon and turret assemblies
-    const weaponMatch = name.match(/^(Weapon_[A-Za-z0-9_]+|Turret_[A-Za-z0-9_]+)_(Position|Direction|Heading|Muzzle\d*|Rest|Latitude|Pitch|Yaw|Barrel\d*)$/i);
+    // Check weapon assemblies
+    const weaponMatch = name.match(/^(Weapon_[A-Za-z0-9_]+)_(Position|Direction|Heading|Muzzle\d*|Rest|Latitude|Pitch|Yaw|Barrel\d*)$/i);
     if (weaponMatch) {
       const baseName = weaponMatch[1];
-      const isTurretExplicit = baseName.startsWith('Turret');
-      let isTurretDetected = false;
-      if (model && !isTurretExplicit) {
-        // Auto-detect turret if it has Latitude, Pitch, Yaw, or Barrel anywhere in its hierarchy tree
-        const hasTurretParts = model.joints.some(j => j.name.startsWith(baseName + "_") && (j.name.includes("_Latitude") || j.name.includes("_Pitch") || j.name.includes("_Yaw") || j.name.includes("_Barrel")));
-        if (hasTurretParts) isTurretDetected = true;
-      }
-      return { baseName, suffix: weaponMatch[2], type: (isTurretExplicit || isTurretDetected) ? 'turret_group' : 'weapon_group' };
+      return { baseName, suffix: weaponMatch[2], type: 'weapon_group' };
     }
     
     // Check point groups (Capture, Repair, Salvage, Hardpoint)
@@ -483,7 +476,7 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
       return { baseName: pointMatch[1], suffix: pointMatch[2], type };
     }
     
-    // Check base nodes for point groups (they don't always have a suffix for the root)
+    // Check base nodes for point groups
     const exactPointMatch = name.match(/^(CapturePoint\d+|RepairPoint\d+|SalvagePoint\d+|Hardpoint[A-Za-z0-9_]*)$/i);
     if (exactPointMatch) {
       let type = "point_group";
@@ -581,7 +574,6 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
 
     let finalNodeName = name;
     if (addNodeType === "weapon_template") finalNodeName = name.startsWith("Weapon_") || name.startsWith("weapon_") ? name : `Weapon_${name}`;
-    else if (addNodeType === "turret_template") finalNodeName = name.startsWith("Weapon_") || name.startsWith("Turret_") ? name : `Weapon_${name}_Turret`;
     else if (addNodeType === "repair_point_template" || addNodeType === "capture_point_template" || addNodeType === "salvage_point_template") finalNodeName = name; // already computed autoName
     else if (addNodeType === "engine_nozzle") finalNodeName = name;
 
@@ -685,147 +677,21 @@ export const HierarchyTree: React.FC<HierarchyTreeProps> = ({
     } else if (addNodeType === "weapon_template") {
       const base = name.startsWith("Weapon_") || name.startsWith("weapon_") ? name : `Weapon_${name}`;
       const posName = `${base}_Position`;
-      const dirName = `${base}_Direction`;
-      const muzName = `${base}_Muzzle`;
-      const restName = `${base}_Rest`;
 
-      const templateJoints = [
-        {
-          name: posName,
-          parent_name: parent === "(None)" ? undefined : parent,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: dirName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 5.0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: muzName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 5.0, 1]
-            ]
-          }
-        },
-        {
-          name: restName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 5.0, 1]
-            ]
-          }
+      const templateJoint = {
+        name: posName,
+        parent_name: parent === "(None)" ? undefined : parent,
+        local_transform: {
+          m: [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+          ]
         }
-      ];
-      updatedModel.joints = [...model.joints, ...templateJoints];
-      invoke("log_event", { level: "INFO", message: `Baked and added new Weapon template family for base name: ${base}` }).catch(console.error);
-    } else if (addNodeType === "turret_template") {
-      const base = finalNodeName;
-      const posName = `${base}_Position`;
-      const latName = `${base}_Latitude`;
-      const dirName = `${base}_Direction`;
-      const barName = `${base}_Barrel`;
-      const muzName = `${base}_Muzzle`;
-      const restName = `${base}_Rest`;
-
-      const templateJoints = [
-        {
-          name: posName,
-          parent_name: parent === "(None)" ? undefined : parent,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: dirName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 5.0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: latName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 5.0, 1]
-            ]
-          }
-        },
-        {
-          name: barName,
-          parent_name: latName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 5.0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: muzName,
-          parent_name: barName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 5.0, 0, 1]
-            ]
-          }
-        },
-        {
-          name: restName,
-          parent_name: posName,
-          local_transform: {
-            m: [
-              [1, 0, 0, 0],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0],
-              [0, 0, 5.0, 1]
-            ]
-          }
-        }
-      ];
-      updatedModel.joints = [...model.joints, ...templateJoints];
-      invoke("log_event", { level: "INFO", message: `Baked and added new Turret template family for base name: ${base}` }).catch(console.error);
+      };
+      updatedModel.joints = [...model.joints, templateJoint];
+      invoke("log_event", { level: "INFO", message: `Added new Weapon Assembly (Position only): ${base}` }).catch(console.error);
     } else if (addNodeType === "engine_nozzle") {
       const baseJointName = finalNodeName;
       const newJoint = {
@@ -1769,16 +1635,6 @@ const handleDeleteNode = (name: string, type: string) => {
           { key: "Rest", suffix: "_Rest" },
         ],
       },
-      turret_group: {
-        label: "Turret group",
-        required: [
-          { key: "Position", suffix: "_Position" },
-          { key: "Direction", suffix: "_Direction" },
-          { key: "Latitude", suffix: "_Latitude" },
-          { key: "Muzzle", suffix: "_Muzzle", allowPrefix: true },
-          { key: "Rest", suffix: "_Rest" },
-        ],
-      },
       hardpoint_group: {
         label: "Hardpoint group",
         required: [
@@ -2408,9 +2264,6 @@ const handleDeleteNode = (name: string, type: string) => {
 
     if (searchTerm && !matchesSearch) return null;
 
-    // Detect if this is a Turret vs standard Weapon
-    // const _isTurret = baseName.toLowerCase().includes("turret") || groupJoints.some(j => j.name.toLowerCase().includes("turret"));
-
     return (
       <div key={`weapon_group:${baseName}`} style={{ marginLeft: depth > 0 ? "12px" : "0px" }}>
         <div
@@ -2449,7 +2302,6 @@ const handleDeleteNode = (name: string, type: string) => {
               {(() => {
                 const info = getWeaponGroupInfo(baseName + "_Position") || getWeaponGroupInfo(baseName + "_Heading") || getWeaponGroupInfo(baseName);
                 const type = info?.type || "weapon_group";
-                if (type === "turret_group") return "Turret: " + baseName;
                 if (type === "weapon_group") return "Weapon: " + baseName;
                 if (type === "hardpoint_group") return "Hardpoint: " + baseName;
                 return "Point: " + baseName;
@@ -3690,8 +3542,7 @@ const handleDeleteNode = (name: string, type: string) => {
                   <option value="navlight">NavLight (Pulsing Light Source)</option>
                   <option value="dockpath">Docking Path</option>
                   <option value="collision">Collision Hull Mesh</option>
-                  <option value="weapon_template">Weapon Assembly (HWRM Template)</option>
-                  <option value="turret_template">Turret Assembly (HWRM Template)</option>
+                  <option value="weapon_template">Weapon Assembly (Toggleable)</option>
                   <option value="engine_nozzle">Engine Nozzle (Joint + Burn plume)</option>
                   <option value="repair_point_template">Repair Point Template</option>
                   <option value="capture_point_template">Capture Point Template</option>

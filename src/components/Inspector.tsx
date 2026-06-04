@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { HODModel, Vector3D, HODNavLight, HODDockpoint } from "./Viewport";
 import { parseTextureGroups, SHADER_SLOTS, KNOWN_TYPES } from "../texture_utils";
 import { Info, Move, Navigation, Layers, Radio, Activity, Shield, Flame, RefreshCw, Palette, Download, Upload, Wrench, Plus, Eye, EyeOff, Box, Image, Trash2, FlipVertical } from "lucide-react";
+import { WeaponGroupInspector } from "./WeaponGroupInspector";
 
 interface InspectorProps {
   model: HODModel | null;
@@ -67,7 +68,7 @@ const handleNumericWheel = (e: React.WheelEvent<HTMLInputElement>, onChange: (va
 
 
 // Converts 4x4 matrix representation to Euler rotation in degrees (XYZ order)
-const getEulerRotation = (m: number[][]): { x: number; y: number; z: number } => {
+export const getEulerRotation = (m: number[][]): { x: number; y: number; z: number } => {
   if (!m || m.length < 4 || m.some(row => !row || row.length < 4)) {
     return { x: 0, y: 0, z: 0 };
   }
@@ -86,7 +87,7 @@ const getEulerRotation = (m: number[][]): { x: number; y: number; z: number } =>
 };
 
 // Builds a new 4x4 rotation matrix using new Euler angles in degrees and merges it with position
-const updateMatrixRotation = (m: number[][], rot: { x: number; y: number; z: number }): number[][] => {
+export const updateMatrixRotation = (m: number[][], rot: { x: number; y: number; z: number }): number[][] => {
   const radX = THREE.MathUtils.degToRad(rot.x);
   const radY = THREE.MathUtils.degToRad(rot.y);
   const radZ = THREE.MathUtils.degToRad(rot.z);
@@ -105,7 +106,7 @@ const updateMatrixRotation = (m: number[][], rot: { x: number; y: number; z: num
   return next;
 };
 
-interface NumericInputProps {
+export interface NumericInputProps {
   value: number;
   onChange: (val: string) => void;
   onWheel?: (e: React.WheelEvent<HTMLInputElement>) => void;
@@ -115,7 +116,7 @@ interface NumericInputProps {
   style?: React.CSSProperties;
 }
 
-const NumericInput: React.FC<NumericInputProps> = ({
+export const NumericInput: React.FC<NumericInputProps> = ({
   value,
   onChange,
   onWheel,
@@ -940,9 +941,18 @@ export const Inspector: React.FC<InspectorProps> = ({
       );
     }
 
+    if (selectedNode.type === "weapon_group") {
+      return (
+        <WeaponGroupInspector
+          model={model}
+          selectedNode={selectedNode as {type: string, name: string}}
+          onModelChange={onModelChange}
+          onPositionChange={onPositionChange}
+        />
+      );
+    }
+
     if (
-      selectedNode.type === "weapon_group" ||
-      selectedNode.type === "turret_group" ||
       selectedNode.type === "hardpoint_group" ||
       selectedNode.type === "capture_point_group" ||
       selectedNode.type === "repair_point_group" ||
@@ -951,9 +961,8 @@ export const Inspector: React.FC<InspectorProps> = ({
       const baseName = selectedNode.name;
       const groupType = selectedNode.type;
 
-      let groupLabel = "Unified Weapon Assembly";
-      if (groupType === "turret_group") groupLabel = "Turret Assembly";
-      else if (groupType === "hardpoint_group") groupLabel = "Hardpoint Assembly";
+      let groupLabel = "Assembly";
+      if (groupType === "hardpoint_group") groupLabel = "Hardpoint Assembly";
       else if (groupType === "capture_point_group") groupLabel = "Capture Point Assembly";
       else if (groupType === "repair_point_group") groupLabel = "Repair Point Assembly";
       else if (groupType === "salvage_point_group") groupLabel = "Salvage Point Assembly";
@@ -966,23 +975,7 @@ export const Inspector: React.FC<InspectorProps> = ({
         defaultOffset: { x: number; y: number; z: number };
       }[] = [];
 
-      if (groupType === "weapon_group") {
-        jointSpecs = [
-          { key: "Position", label: "1. Position (Pivot / Yaw)", suffix: "_Position", parentSuffix: null, defaultOffset: { x: 0, y: 0, z: 0 } },
-          { key: "Direction", label: "2. Direction (Elevation / Pitch)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
-          { key: "Muzzle", label: "3. Muzzle (Projectile spawn)", suffix: "_Muzzle", parentSuffix: "_Direction", defaultOffset: { x: 0, y: 0, z: 5.0 } },
-          { key: "Rest", label: "4. Rest (Idle standard)", suffix: "_Rest", parentSuffix: "_Position", defaultOffset: { x: 0, y: 0, z: 5.0 } },
-        ];
-      } else if (groupType === "turret_group") {
-        jointSpecs = [
-          { key: "Position", label: "1. Position (Yaw)", suffix: "_Position", parentSuffix: null, defaultOffset: { x: 0, y: 0, z: 0 } },
-          { key: "Direction", label: "2. Direction (Turret Heading)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
-          { key: "Latitude", label: "3. Latitude (Pitch)", suffix: "_Latitude", parentSuffix: "_Position", defaultOffset: { x: 0, y: 0, z: 5.0 } },
-          { key: "Barrel", label: "4. Barrel (Recoil)", suffix: "_Barrel", parentSuffix: "_Latitude", defaultOffset: { x: 0, y: 0, z: 0 } },
-          { key: "Muzzle", label: "5. Muzzle (Projectile)", suffix: "_Muzzle", parentSuffix: "_Barrel", defaultOffset: { x: 0, y: 5.0, z: 0 } },
-          { key: "Rest", label: "6. Rest (Idle)", suffix: "_Rest", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
-        ];
-      } else if (groupType === "hardpoint_group") {
+      if (groupType === "hardpoint_group") {
         jointSpecs = [
           { key: "Position", label: "1. Position (Pivot)", suffix: "_Position", parentSuffix: null, defaultOffset: { x: 0, y: 0, z: 0 } },
           { key: "Direction", label: "2. Direction (Forward)", suffix: "_Direction", parentSuffix: "_Position", defaultOffset: { x: 0, y: 5.0, z: 0 } },
@@ -1021,7 +1014,6 @@ export const Inspector: React.FC<InspectorProps> = ({
       });
 
       const missingJoints = foundJoints.filter(fj => !fj.jointObj).map(fj => fj.spec.key);
-      const latJoint = groupType === "weapon_group" ? model.joints.find(j => j.name.toLowerCase() === `${baseName}_Latitude`.toLowerCase()) : null;
 
       const handleWeaponJointCoordChange = (jointName: string, axis: "x" | "y" | "z", valStr: string) => {
         const val = parseFloat(valStr);
@@ -1254,27 +1246,8 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
           )}
 
-          {groupType === "weapon_group" && missingJoints.length === 0 && (
-            <button
-              onClick={async () => {
-                if (!model) return;
-                try {
-                  const updatedModel = await invoke<any>("convert_weapon_to_turret", { model, baseName: baseName });
-                  onModelChange?.(updatedModel);
-                  invoke("log_event", { level: "INFO", message: `Converted weapon ${baseName} to Turret` }).catch(console.error);
-                } catch (e: any) {
-                  alert(`Failed to convert: ${e}`);
-                }
-              }}
-              style={{ background: "rgba(22, 160, 255, 0.1)", border: "1px solid var(--accent-cyan)", padding: "6px 12px", color: "var(--accent-cyan)", fontSize: "11px", fontWeight: "600", borderRadius: "4px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", width: "fit-content" }}
-            >
-              Convert to Turret Assembly
-            </button>
-          )}
-
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {foundJoints.map(fj => renderJointCard(fj.spec.label, fj.spec.key, fj.jointObj))}
-            {latJoint && renderJointCard("5. Latitude (Axis modifier)", "Latitude", latJoint)}
           </div>
         </div>
       );
