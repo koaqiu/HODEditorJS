@@ -115,6 +115,17 @@ function App() {
     invoke("log_event", { level: "INFO", message: "HOD Remastered Editor React Frontend initialized." }).catch(console.error);
   }, []);
 
+  // Global Escape key listener to clear selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedNode(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Log selected node changes
   useEffect(() => {
     if (selectedNode) {
