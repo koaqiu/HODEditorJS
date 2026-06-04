@@ -739,7 +739,7 @@ export const Viewport: React.FC<ViewportProps> = ({
       // 5. Set up Transform Controls for Visually Moving Joints/Markers
       const transformControls = new TransformControls(camera, renderer.domElement);
       transformControlsRef.current = transformControls;
-      scene.add(transformControls as unknown as THREE.Object3D);
+      scene.add(transformControls.getHelper());
 
       // Prevent orbit rotation while transforming nodes
       transformControls.addEventListener("dragging-changed", (event) => {

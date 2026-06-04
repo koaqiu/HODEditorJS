@@ -42,24 +42,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Editor Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        {transformMode && setTransformMode && (
-          <div style={{ display: "flex", gap: "4px", background: "var(--bg-panel)", padding: "4px", borderRadius: "4px", border: "1px solid var(--border-color)" }}>
-            <button 
-              className={`toolbar-btn ${transformMode === "translate" ? "primary" : "outline"}`} 
-              onClick={() => setTransformMode("translate")}
-              title="Move Node"
-            >
-              Move
-            </button>
-            <button 
-              className={`toolbar-btn ${transformMode === "rotate" ? "primary" : "outline"}`} 
-              onClick={() => setTransformMode("rotate")}
-              title="Rotate Node"
-            >
-              Rotate
-            </button>
-          </div>
-        )}
+
         {/* File Operation Triggers */}
         <div style={{ display: "flex", gap: "8px" }}>
           {onNewClick && (
