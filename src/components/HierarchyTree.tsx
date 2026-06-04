@@ -1630,9 +1630,6 @@ const handleDeleteNode = (name: string, type: string) => {
         label: "Weapon group",
         required: [
           { key: "Position", suffix: "_Position" },
-          { key: "Direction", suffix: "_Direction" },
-          { key: "Muzzle", suffix: "_Muzzle", allowPrefix: true },
-          { key: "Rest", suffix: "_Rest" },
         ],
       },
       hardpoint_group: {
