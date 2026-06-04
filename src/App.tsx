@@ -942,8 +942,6 @@ function App() {
         onNewClick={handleCreateNewHOD}
         onImportDAEClick={selectAndImportDAE}
         onSettingsClick={() => setIsSettingsModalOpen(true)}
-        transformMode={transformMode}
-        setTransformMode={setTransformMode}
       />
 
 {/* Main Workspace Panels */}

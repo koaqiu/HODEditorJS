@@ -744,10 +744,13 @@ export const Viewport: React.FC<ViewportProps> = ({
       // Prevent orbit rotation while transforming nodes
       transformControls.addEventListener("dragging-changed", (event) => {
         orbitControls.enabled = !event.value;
+        if (!event.value) {
+          // Drag finished. Commit transform to the global React state.
+          commitTransform();
+        }
       });
 
-      // Notify parent on node movement
-      transformControls.addEventListener("objectChange", () => {
+      const commitTransform = () => {
         const activeNode = selectedNodeRef.current;
         if (transformControls.object && activeNode) {
           const obj = transformControls.object;
@@ -813,6 +816,14 @@ export const Viewport: React.FC<ViewportProps> = ({
             );
           }
         }
+      };
+
+      // We no longer trigger re-renders during active drag, because it rebuilds 
+      // the scene and destroys the target object causing TransformControls to crash.
+      transformControls.addEventListener("objectChange", () => {
+        // Optional: you could update local React state for Inspector preview here 
+        // without causing a global model change, but for now we just let the 3D 
+        // viewport update itself until the drag ends.
       });
 
       const meshesGroup = new THREE.Group();

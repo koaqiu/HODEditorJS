@@ -10,8 +10,6 @@ interface ToolbarProps {
   onNewClick?: () => void;
   onImportDAEClick?: () => void;
   onSettingsClick?: () => void;
-  transformMode?: "translate" | "rotate" | "scale";
-  setTransformMode?: (mode: "translate" | "rotate" | "scale") => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -23,8 +21,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onNewClick,
   onImportDAEClick,
   onSettingsClick,
-  transformMode,
-  setTransformMode,
 }) => {
   return (
     <header className="toolbar" style={{ padding: "8px 16px", minHeight: "48px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
