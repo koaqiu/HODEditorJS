@@ -293,6 +293,20 @@ export const Viewport: React.FC<ViewportProps> = ({
     const nextVisited = new Set(visited);
     nextVisited.add(jointName.toLowerCase());
 
+    // If this joint is currently being actively dragged by the user, bypass keyframe 
+    // interpolation and just use its current live visual transform as the global matrix.
+    // This stops evaluateAnimation from snapping it back and allows children to follow it smoothly.
+    const tc = transformControlsRef.current;
+    if (tc && tc.dragging && tc.object) {
+      const tcName = tc.object.name.toLowerCase();
+      // Allow it if it's the matching joint, navlight, or marker
+      if (tcName === `joint:${joint.name}`.toLowerCase() || 
+          tcName === `navlight:${joint.name}`.toLowerCase()) {
+        tc.object.updateMatrix();
+        return tc.object.matrix.clone();
+      }
+    }
+
     let parentMatrix = new THREE.Matrix4();
     if (joint.parent_name && joint.parent_name.toLowerCase() !== jointName.toLowerCase()) {
       parentMatrix = getAnimatedJointGlobalMatrix(joint.parent_name, time, nextVisited);
@@ -387,13 +401,18 @@ export const Viewport: React.FC<ViewportProps> = ({
           c => c.name.toLowerCase() === `joint:${joint.name}`.toLowerCase()
         ) as THREE.Mesh | undefined;
         if (jointMesh) {
-          const animatedWorldMatrix = getAnimatedJointGlobalMatrix(joint.name, time);
-          const pos = new THREE.Vector3();
-          const quat = new THREE.Quaternion();
-          const scale = new THREE.Vector3();
-          animatedWorldMatrix.decompose(pos, quat, scale);
-          jointMesh.position.copy(pos);
-          jointMesh.quaternion.copy(quat);
+          const tc = transformControlsRef.current;
+          const isBeingDragged = tc && tc.dragging && tc.object === jointMesh;
+
+          if (!isBeingDragged) {
+            const animatedWorldMatrix = getAnimatedJointGlobalMatrix(joint.name, time);
+            const pos = new THREE.Vector3();
+            const quat = new THREE.Quaternion();
+            const scale = new THREE.Vector3();
+            animatedWorldMatrix.decompose(pos, quat, scale);
+            jointMesh.position.copy(pos);
+            jointMesh.quaternion.copy(quat);
+          }
 
           const activeNode = selectedNodeRef.current;
           const isSelected = activeNode && activeNode.type === "joint" && activeNode.name.toLowerCase() === joint.name.toLowerCase();
@@ -453,10 +472,15 @@ export const Viewport: React.FC<ViewportProps> = ({
         const baseMatrix = child.userData.baseMatrix as THREE.Matrix4 | undefined;
         if (!parentJointName || !baseMatrix) return;
 
-        const animatedWorldMatrix = getAnimatedJointGlobalMatrix(parentJointName, time);
-        const newMatrix = animatedWorldMatrix.clone().multiply(baseMatrix);
-        child.matrix.copy(newMatrix);
-        child.matrix.decompose(child.position, child.quaternion, child.scale);
+        const tc = transformControlsRef.current;
+        const isBeingDragged = tc && tc.dragging && tc.object === child;
+
+        if (!isBeingDragged) {
+          const animatedWorldMatrix = getAnimatedJointGlobalMatrix(parentJointName, time);
+          const newMatrix = animatedWorldMatrix.clone().multiply(baseMatrix);
+          child.matrix.copy(newMatrix);
+          child.matrix.decompose(child.position, child.quaternion, child.scale);
+        }
         
         // Prevent visual helper gizmos from becoming massive due to joint scale
         if (child.name.startsWith("dockpoint:") || 

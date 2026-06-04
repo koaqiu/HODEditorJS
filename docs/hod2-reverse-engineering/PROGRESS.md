@@ -855,3 +855,9 @@ This document tracks all progress in the HOD 2.0 reverse engineering project. **
   2. Moved the `transformControls.detach()` call to run *before* `scene.updateMatrixWorld(true)` in the scene rebuild hook.
   3. Switched from continuous `objectChange` React state updates to a deferred `dragging-changed` mouse-up commit to avoid thrashing the scene tree during active drags.
 * **Verification**: Gizmo dragging is now smooth, no longer crashes, and correctly commits the final absolute transform without jumping to the origin.
+
+## 2026-06-03: EngineNozzle Gizmo Selection Fix
+* **What failed**: Selecting an `EngineNozzle` in the Hierarchy Tree failed to attach the Viewport TransformControls gizmo.
+* **Root Cause**: The `HierarchyTree` maps `EngineNozzle` to the custom type `"engine_nozzle"`, but the `Viewport.tsx` gizmo target lookup logic only handled `"joint"`, `"marker"`, and `"navlight"`. `EngineNozzle` joints were falling through the conditionals and evaluating to `undefined` targets.
+* **Fix**: Added explicit `selectedNode.type === "engine_nozzle"` conditionals to the `Viewport.tsx` target resolution, `getLocalPosition`, and `commitTransform` functions to treat it functionally identically to a standard `joint`.
+* **Verification**: Gizmo correctly attaches to and manipulates `EngineNozzle` joints in the viewport.
