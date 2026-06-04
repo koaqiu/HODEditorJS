@@ -798,10 +798,10 @@ export const Viewport: React.FC<ViewportProps> = ({
           
           const localMatrix: Matrix4D = {
             m: [
-              [localMat.elements[0], localMat.elements[4], localMat.elements[8], localMat.elements[12]],
-              [localMat.elements[1], localMat.elements[5], localMat.elements[9], localMat.elements[13]],
-              [localMat.elements[2], localMat.elements[6], localMat.elements[10], localMat.elements[14]],
-              [localMat.elements[3], localMat.elements[7], localMat.elements[11], localMat.elements[15]],
+              [localMat.elements[0], localMat.elements[1], localMat.elements[2], localMat.elements[3]],
+              [localMat.elements[4], localMat.elements[5], localMat.elements[6], localMat.elements[7]],
+              [localMat.elements[8], localMat.elements[9], localMat.elements[10], localMat.elements[11]],
+              [localMat.elements[12], localMat.elements[13], localMat.elements[14], localMat.elements[15]],
             ]
           };
 
@@ -2270,6 +2270,8 @@ export const Viewport: React.FC<ViewportProps> = ({
 
     if (!transformControls || !scene || !jointsGroup || !markersGroup) return;
 
+    transformControls.detach();
+
     // Force Three.js to immediately compute absolute world positions/matrices
     scene.updateMatrixWorld(true);
 
@@ -2277,8 +2279,6 @@ export const Viewport: React.FC<ViewportProps> = ({
     if (selectionAxesHelperRef.current && selectionAxesHelperRef.current.parent) {
       selectionAxesHelperRef.current.parent.remove(selectionAxesHelperRef.current);
     }
-
-    transformControls.detach();
 
     if (selectedNode) {
       if (selectedNode.type === "joint" && selectedNode.name.toLowerCase() === "root") {
