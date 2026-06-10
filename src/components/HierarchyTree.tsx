@@ -1736,6 +1736,22 @@ const handleDeleteNode = (name: string, type: string) => {
       });
     }
 
+    if (model.meshes) {
+      model.meshes.forEach((mesh) => {
+        let totalIndices = 0;
+        if (mesh.parts) {
+          totalIndices = mesh.parts.reduce((sum, part) => sum + (part.indices ? part.indices.length : 0), 0);
+        }
+        const totalTriangles = Math.floor(totalIndices / 3);
+        if (totalTriangles > 21845) {
+          warnings.push({
+            type: "warning",
+            message: `Mesh "${mesh.name}" exceeds the limit of 21845 triangles (${totalTriangles} triangles, ${totalIndices} indices). You must split this mesh to reduce triangles, else the game will render it glitching or crash.`
+          });
+        }
+      });
+    }
+
     return warnings;
   };
 

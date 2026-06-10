@@ -62,13 +62,14 @@
 - [x] Recreate Weapon Assembly
 - [x] Check vgr_planetkiller HOD parsing
 - [x] Drag based positioning / rotating in viewport (disable camera control with left click, leave it for right click)
+- [x] Add warnings for limits on triangles per mesh (21845 triangles per mesh, 65535 indices), as this limit means the user needs to split a mesh to reduce triangles.
 
 - [ ] Fix DAE parsing
+- [ ] Fix auto camera distance on loading model
+- [ ] Autobudget, meaning if the software can upscale according to the current size of the texture (or size of the ship).  Right now, I think 4K can be the limit, but you don't have to create a 4K texture for a ship engine, for example. Badges material don't need upscaling
 
 - [ ] Proper shader rendering in editor
-- [ ] Fix auto camera distance on loading model
 - [ ] LOD mesh generation
 - [ ] Saving as HW2 Classic HOD (Actual HOD 1.0)
 - [ ] Saving as HOD 1.3 (correct name, not HOD 1.0)
 - [ ] Colorscheme manager, like a dropdown list that changes the collection of color samples to house the colorscheme per game (HW1, HW2, HWCata, HWMobile, Personal set, etc);
-- [ ] Autobudget, meaning if the software can upscale according to the current size of the texture (or size of the ship).  Right now, I think 4K can be the limit, but you don't have to create a 4K texture for a ship engine, for example. Badges material don't need upscaling
