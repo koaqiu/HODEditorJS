@@ -106,7 +106,7 @@ pub fn generate_collision_mesh(model: &mut HODModel) {
             let min = &cm.min_extents;
             let max = &cm.max_extents;
 
-            println!(
+            crate::pdbg!(
                 "[RUST] Generating collision mesh box vertices from extents: min=({},{},{}), max=({},{},{})",
                 min.x, min.y, min.z, max.x, max.y, max.z
             );
@@ -236,7 +236,7 @@ pub fn generate_collision_mesh(model: &mut HODModel) {
                 indices,
             }];
 
-            println!(
+            crate::pdbg!(
                 "[RUST] Generated collision mesh: {} vertices, {} indices",
                 cm.mesh.parts[0].vertices.len(),
                 cm.mesh.parts[0].indices.len()

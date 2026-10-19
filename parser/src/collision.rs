@@ -364,7 +364,7 @@ pub fn generate_collision_from_visible_mesh(
     let (hull_verts, hull_faces) = convex_hull_3d(&hull_input);
 
     if hull_verts.is_empty() || hull_faces.is_empty() {
-        println!("[COLLISION] Convex hull failed or too complex, falling back to AABB box");
+        crate::pdbg!("[COLLISION] Convex hull failed or too complex, falling back to AABB box");
         // Fall back to AABB box with margin
         let inflated_min = [
             aabb_min[0] - margin,
@@ -597,7 +597,7 @@ pub fn generate_collision_from_visible_mesh(
         })
         .collect();
 
-    println!(
+    crate::pdbg!(
         "[COLLISION] Convex hull bubble: {} source verts -> {} hull verts, {} faces, margin={:.3}",
         all_positions.len(),
         hod_vertices.len(),
@@ -651,7 +651,7 @@ pub fn generate_lod_meshes(lod0_mesh: &HODMesh) -> Vec<HODMesh> {
                 decimate_mesh(&part.vertices, &part.indices, target_ratio);
 
             if !decimated_verts.is_empty() && !decimated_indices.is_empty() {
-                println!("[LOD] Level {}: Part reduced from {} verts/{} indices to {} verts/{} indices ({:.1}% verts, {:.1}% tris)",
+                crate::pdbg!("[LOD] Level {}: Part reduced from {} verts/{} indices to {} verts/{} indices ({:.1}% verts, {:.1}% tris)",
                     lod_level,
                     orig_vert_count, orig_idx_count,
                     decimated_verts.len(), decimated_indices.len(),
@@ -790,9 +790,9 @@ mod tests {
         ];
 
         let (verts, faces) = convex_hull_3d(&points);
-        println!("Tetrahedron: {} verts, {} faces", verts.len(), faces.len());
+        crate::pdbg!("Tetrahedron: {} verts, {} faces", verts.len(), faces.len());
         for (i, f) in faces.iter().enumerate() {
-            println!("  Face {}: [{}, {}, {}]", i, f[0], f[1], f[2]);
+            crate::pdbg!("  Face {}: [{}, {}, {}]", i, f[0], f[1], f[2]);
         }
         assert_eq!(verts.len(), 4, "Tetrahedron hull should have 4 vertices");
         assert_eq!(faces.len(), 4, "Tetrahedron hull should have 4 faces");

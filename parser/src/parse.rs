@@ -96,7 +96,7 @@ pub(crate) fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> R
         let mut cur_w = width as usize;
         let mut cur_h = height as usize;
         let pool_pos_before = context.texture_pool.position();
-        println!(
+        crate::pdbg!(
             "[TEX-DEBUG] Parsing texture '{}' ({}x{}, {} mips, format={}) at pool position {}",
             name, width, height, mip_count, format, pool_pos_before
         );
@@ -104,7 +104,7 @@ pub(crate) fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> R
         for mip_idx in 0..mip_count {
             let mip_size = compressed_texture_mip_size(&format, cur_w, cur_h);
             expected_size += mip_size;
-            println!(
+            crate::pdbg!(
                 "[TEX-DEBUG]   Mip {}: {}x{} = {} bytes (cumulative: {})",
                 mip_idx, cur_w, cur_h, mip_size, expected_size
             );
@@ -118,13 +118,13 @@ pub(crate) fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> R
         let mut buf = vec![0u8; expected_size.min(1024 * 1024 * 8)]; // clamp to safe limits
         if let Ok(_) = context.texture_pool.read_exact(&mut buf) {
             let pool_pos_after = context.texture_pool.position();
-            println!(
+            crate::pdbg!(
                 "[TEX-DEBUG] Read {} bytes, pool position now: {}",
                 expected_size, pool_pos_after
             );
             raw_pixels = buf;
         } else {
-            println!(
+            crate::pdbg!(
                 "[TEX-DEBUG] FAILED to read {} bytes from texture pool!",
                 expected_size
             );
@@ -245,7 +245,7 @@ pub(crate) fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> R
 
         // 3. Load and convert the TGA file to PNG!
         if let Some(path) = tga_path {
-            println!(
+            crate::pdbg!(
                 "[RUST] Found TGA texture on disk: {}",
                 path.to_string_lossy()
             );
@@ -260,7 +260,7 @@ pub(crate) fn parse_texture(chunk: &IffChunk, context: &mut ParsingContext) -> R
                             format!("data:image/png;base64,{}", base64_encode(&png_bytes));
                         png_preview = Some(full_b64.clone());
                         png_data = Some(full_b64);
-                        println!(
+                        crate::pdbg!(
                             "[RUST] Successfully converted TGA to PNG preview! Size: {} bytes",
                             png_bytes.len()
                         );
@@ -315,7 +315,7 @@ impl HODModel {
         hod_file_path: Option<&str>,
         uncompressed_path: Option<&str>,
     ) -> Result<Self, String> {
-        println!(
+        crate::pdbg!(
             "[RUST] HODModel::parse: Initiating with {} bytes.",
             bytes.len()
         );
@@ -327,12 +327,12 @@ impl HODModel {
             match IffChunk::read_chunk(&mut cursor) {
                 Ok(chunk) => chunks.push(chunk),
                 Err(e) => {
-                    println!("[RUST] IFF boundary read error: {}", e);
+                    crate::pdbg!("[RUST] IFF boundary read error: {}", e);
                     return Err(format!("IFF boundary read error: {}", e));
                 }
             }
         }
-        println!("[RUST] HODModel::parse: Chunks parsed: {}", chunks.len());
+        crate::pdbg!("[RUST] HODModel::parse: Chunks parsed: {}", chunks.len());
 
         let hod_file_path_buf = hod_file_path.map(|p| std::path::Path::new(p).to_path_buf());
         let hod_dir = hod_file_path_buf
@@ -353,7 +353,7 @@ impl HODModel {
 
         for chunk in &chunks {
             if chunk.id == "POOL" {
-                println!("[RUST] POOL chunk detected. Decompressing streams...");
+                crate::pdbg!("[RUST] POOL chunk detected. Decompressing streams...");
                 let mut pool_cursor = Cursor::new(&chunk.data);
                 let _pool_type = pool_cursor
                     .read_u32::<LittleEndian>()
@@ -366,7 +366,7 @@ impl HODModel {
                 let decomp_tex_len = pool_cursor
                     .read_u32::<LittleEndian>()
                     .map_err(|e| e.to_string())? as usize;
-                println!(
+                crate::pdbg!(
                     "[RUST]   Texture pool: compressed={}, decompressed={}",
                     comp_tex_len, decomp_tex_len
                 );
@@ -388,7 +388,7 @@ impl HODModel {
                 let decomp_mesh_len = pool_cursor
                     .read_u32::<LittleEndian>()
                     .map_err(|e| e.to_string())? as usize;
-                println!(
+                crate::pdbg!(
                     "[RUST]   Mesh pool: compressed={}, decompressed={}",
                     comp_mesh_len, decomp_mesh_len
                 );
@@ -401,7 +401,7 @@ impl HODModel {
                 } else {
                     xpress::decompress(&comp_mesh, decomp_mesh_len)?
                 };
-                println!("[RUST] First 256 bytes of decompressed mesh pool:");
+                crate::pdbg!("[RUST] First 256 bytes of decompressed mesh pool:");
                 for i in 0..16 {
                     let offset = i * 16;
                     if offset + 16 <= decomp_mesh.len() {
@@ -410,7 +410,7 @@ impl HODModel {
                             .chunks(4)
                             .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                             .collect();
-                        println!("  {:04X}: {:02x?} | {:?}", offset, slice, floats);
+                        crate::pdbg!("  {:04X}: {:02x?} | {:?}", offset, slice, floats);
                     }
                 }
                 context.mesh_pool = Cursor::new(decomp_mesh);
@@ -422,7 +422,7 @@ impl HODModel {
                 let decomp_face_len = pool_cursor
                     .read_u32::<LittleEndian>()
                     .map_err(|e| e.to_string())? as usize;
-                println!(
+                crate::pdbg!(
                     "[RUST]   Face pool: compressed={}, decompressed={}",
                     comp_face_len, decomp_face_len
                 );
@@ -435,7 +435,7 @@ impl HODModel {
                 } else {
                     xpress::decompress(&comp_face, decomp_face_len)?
                 };
-                println!("[RUST] First 128 u16s of decompressed face pool:");
+                crate::pdbg!("[RUST] First 128 u16s of decompressed face pool:");
                 for chunk in decomp_face.chunks(32).take(8) {
                     let u16s: Vec<u16> = chunk
                         .chunks(2)
@@ -447,17 +447,17 @@ impl HODModel {
                             }
                         })
                         .collect();
-                    println!("  {:?}", u16s);
+                    crate::pdbg!("  {:?}", u16s);
                 }
                 context.face_pool = Cursor::new(decomp_face);
 
-                println!("[RUST] POOL decompression complete.");
+                crate::pdbg!("[RUST] POOL decompression complete.");
                 break;
             }
         }
 
         // Step 3: Parse standard chunks (VERS, NAME, HVMD, DTRM)
-        println!("[RUST] Step 3: Parsing standard chunks (VERS, NAME, HVMD, DTRM)...");
+        crate::pdbg!("[RUST] Step 3: Parsing standard chunks (VERS, NAME, HVMD, DTRM)...");
         let mut model_version = 0x200;
         let mut model_name = String::new();
         let mut textures = Vec::new();
@@ -474,7 +474,7 @@ impl HODModel {
         let mut preserved_chunks = Vec::new();
 
         for chunk in &chunks {
-            println!(
+            crate::pdbg!(
                 "[RUST]   Processing chunk ID: '{}' (type={:?}, size={})",
                 chunk.id,
                 chunk.chunk_type,
@@ -482,25 +482,25 @@ impl HODModel {
             );
             match chunk.id.as_str() {
                 "VERS" => {
-                    println!("[RUST]     Parsing VERS...");
+                    crate::pdbg!("[RUST]     Parsing VERS...");
                     let mut r = Cursor::new(&chunk.data);
                     if let Ok(ver) = r.read_u32::<LittleEndian>() {
                         model_version = ver;
                     }
                 }
                 "NAME" => {
-                    println!("[RUST]     Parsing NAME...");
+                    crate::pdbg!("[RUST]     Parsing NAME...");
                     model_name = String::from_utf8_lossy(&chunk.data)
                         .trim_matches('\0')
                         .to_string();
                 }
                 "HVMD" => {
-                    println!(
+                    crate::pdbg!(
                         "[RUST]     Parsing HVMD container children (count: {})...",
                         chunk.children.len()
                     );
                     for sub_chunk in &chunk.children {
-                        println!(
+                        crate::pdbg!(
                             "[RUST]       HVMD child: ID='{}', type={:?}, data_len={}",
                             sub_chunk.id,
                             sub_chunk.chunk_type,
@@ -513,16 +513,16 @@ impl HODModel {
                             "LMIP" => {
                                 // Extract textures from LMIP
                                 if sub_chunk.data.len() < 12 {
-                                    println!(
+                                    crate::pdbg!(
                                         "[RUST]       Skipping tiny LMIP chunk (len={})",
                                         sub_chunk.data.len()
                                     );
                                     continue;
                                 }
-                                println!("[RUST]       Parsing LMIP texture chunk...");
+                                crate::pdbg!("[RUST]       Parsing LMIP texture chunk...");
                                 let tex = parse_texture(sub_chunk, &mut context)
                                     .map_err(|e| format!("Error in LMIP texture: {}", e))?;
-                                println!("[RUST]         Successfully parsed texture: name='{}', format='{}'", tex.name, tex.format);
+                                crate::pdbg!("[RUST]         Successfully parsed texture: name='{}', format='{}'", tex.name, tex.format);
                                 textures.push(tex);
                             }
                             "TEXM" => {
@@ -552,7 +552,7 @@ impl HODModel {
                             }
                             "MSHL" => {
                                 // Extract meshes
-                                println!(
+                                crate::pdbg!(
                                     "[RUST]         MSHL children count: {}",
                                     sub_chunk.children.len()
                                 );
@@ -575,7 +575,7 @@ impl HODModel {
                                 let mut len_bytes = [0u8; 4];
                                 if reader.read_exact(&mut len_bytes).is_ok() {
                                     let len = u32::from_le_bytes(len_bytes) as usize;
-                                    println!(
+                                    crate::pdbg!(
                                         "[RUST]         {} named sub-mesh string length: {}",
                                         sub_chunk.id, len
                                     );
@@ -592,7 +592,7 @@ impl HODModel {
                                             let remaining_after_parent_len = total_len
                                                 .saturating_sub(reader.position() as usize);
                                             if parent_len <= remaining_after_parent_len {
-                                                println!(
+                                                crate::pdbg!(
                                                     "[RUST]         parent_len string length: {}",
                                                     parent_len
                                                 );
@@ -612,11 +612,11 @@ impl HODModel {
                                                 let mut sub_chunks = Vec::new();
                                                 let mut sub_cursor =
                                                     Cursor::new(&sub_chunk.data[current_pos..]);
-                                                println!("[RUST]         MULT payload current_pos={}, total_len={}, remaining={}", current_pos, sub_chunk.data.len(), sub_chunk.data.len() - current_pos);
+                                                crate::pdbg!("[RUST]         MULT payload current_pos={}, total_len={}, remaining={}", current_pos, sub_chunk.data.len(), sub_chunk.data.len() - current_pos);
                                                 let mut debug_bytes = [0u8; 16];
                                                 let pos = sub_cursor.position();
                                                 let _ = sub_cursor.read(&mut debug_bytes);
-                                                println!("[RUST]         Next 16 bytes at pos {}: {:02x?}", pos, debug_bytes);
+                                                crate::pdbg!("[RUST]         Next 16 bytes at pos {}: {:02x?}", pos, debug_bytes);
                                                 sub_cursor.set_position(pos);
 
                                                 while sub_cursor.position()
@@ -625,13 +625,13 @@ impl HODModel {
                                                     match IffChunk::read_chunk(&mut sub_cursor) {
                                                         Ok(c) => sub_chunks.push(c),
                                                         Err(e) => {
-                                                            println!("[RUST] WARNING: Failed to read chunk inside MULT: {}", e);
+                                                            crate::pdbg!("[RUST] WARNING: Failed to read chunk inside MULT: {}", e);
                                                             break;
                                                         }
                                                     }
                                                 }
 
-                                                println!(
+                                                crate::pdbg!(
                                                     "[RUST]         {} child chunks parsed: {}",
                                                     sub_chunk.id,
                                                     sub_chunks.len()
@@ -640,12 +640,12 @@ impl HODModel {
                                                     .iter()
                                                     .any(|child| child.id.trim() == "TAGS");
                                                 for child in &sub_chunks {
-                                                    println!("[RUST]         Checking child chunk ID='{}' (len={}) against BMSH", child.id, child.data.len());
+                                                    crate::pdbg!("[RUST]         Checking child chunk ID='{}' (len={}) against BMSH", child.id, child.data.len());
 
                                                     let is_nrml_bmsh = child.id.trim() == "NRML"
                                                         && child.data.starts_with(b"BMSH");
                                                     let actual_child = if is_nrml_bmsh {
-                                                        println!("[RUST]         Unwrapping BMSH from NRML chunk");
+                                                        crate::pdbg!("[RUST]         Unwrapping BMSH from NRML chunk");
                                                         std::borrow::Cow::Owned(IffChunk {
                                                             id: "BMSH".to_string(),
                                                             chunk_type:
@@ -672,16 +672,16 @@ impl HODModel {
                                                         mesh.name = name.clone();
                                                         mesh.parent_name = parent_name.clone();
                                                         mesh.has_mult_tags = has_mult_tags;
-                                                        println!("[RUST]         PUSHING MESH '{}' to meshes list. Previous meshes.len()={}", mesh.name, meshes.len());
+                                                        crate::pdbg!("[RUST]         PUSHING MESH '{}' to meshes list. Previous meshes.len()={}", mesh.name, meshes.len());
                                                         meshes.push(mesh);
                                                     }
                                                 }
                                             } else {
-                                                println!("[RUST]         WARNING: Suspicious parent_len {} (remaining={}), skipping sub-mesh hierarchy parse for {}", parent_len, remaining_after_parent_len, sub_chunk.id);
+                                                crate::pdbg!("[RUST]         WARNING: Suspicious parent_len {} (remaining={}), skipping sub-mesh hierarchy parse for {}", parent_len, remaining_after_parent_len, sub_chunk.id);
                                             }
                                         }
                                     } else {
-                                        println!("[RUST]         WARNING: Suspicious name string length {} (total_len={}), skipping sub-mesh hierarchy parse for {}", len, total_len, sub_chunk.id);
+                                        crate::pdbg!("[RUST]         WARNING: Suspicious name string length {} (total_len={}), skipping sub-mesh hierarchy parse for {}", len, total_len, sub_chunk.id);
                                     }
                                 }
                             }
@@ -690,7 +690,7 @@ impl HODModel {
                     }
                 }
                 "DTRM" => {
-                    println!(
+                    crate::pdbg!(
                         "[RUST]     Parsing DTRM container children (count: {})...",
                         chunk.children.len()
                     );
@@ -698,7 +698,7 @@ impl HODModel {
                     let mut pending_kdop_collision: Option<HODCollisionMesh> = None;
                     let mut pending_cold_collision: Option<HODCollisionMesh> = None;
                     for sub_chunk in &chunk.children {
-                        println!(
+                        crate::pdbg!(
                             "[RUST]       DTRM Sub-chunk: '{}' (size={})",
                             sub_chunk.id,
                             sub_chunk.data.len()
@@ -854,9 +854,9 @@ impl HODModel {
                             "DOCK" => match parse_dock_chunk(&sub_chunk.data, context.is_v2) {
                                 Ok(parsed_dockpaths) => dockpaths.extend(parsed_dockpaths),
                                 Err(e) => {
-                                    println!("[RUST] WARNING: Failed to parse DOCK chunk: {}", e);
+                                    crate::pdbg!("[RUST] WARNING: Failed to parse DOCK chunk: {}", e);
                                     let preview = sub_chunk.data.iter().take(128).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
-                                    println!("[RUST] DOCK chunk size: {}, preview: {}", sub_chunk.data.len(), preview);
+                                    crate::pdbg!("[RUST] DOCK chunk size: {}, preview: {}", sub_chunk.data.len(), preview);
                                 }
                             },
                             "GLOW" => {
@@ -967,7 +967,7 @@ impl HODModel {
                                         pending_kdop_collision = Some(kdop_collision);
                                     }
                                     Err(e) => {
-                                        println!(
+                                        crate::pdbg!(
                                             "[RUST] WARNING: Failed to parse KDOP collision mesh: {}",
                                             e
                                         );
@@ -1238,7 +1238,7 @@ impl HODModel {
             }
         }
 
-        println!("[RUST] Finished parsing! Name='{}', Meshes={}, Joints={}, Markers={}, NavLights={}, EngineBurns={}, EngineGlows={}, EngineShapes={}, CollisionMeshes={}, Dockpaths={}",
+        crate::pdbg!("[RUST] Finished parsing! Name='{}', Meshes={}, Joints={}, Markers={}, NavLights={}, EngineBurns={}, EngineGlows={}, EngineShapes={}, CollisionMeshes={}, Dockpaths={}",
                  model_name, meshes.len(), joints.len(), markers.len(), nav_lights.len(), engine_burns.len(), engine_glows.len(), engine_shapes.len(), collision_meshes.len(), dockpaths.len());
 
         let mut model = Self {
@@ -1267,21 +1267,21 @@ impl HODModel {
                 .into_iter()
                 .find(|candidate| candidate.exists())
             {
-                println!(
+                crate::pdbg!(
                     "[RUST] Found companion .mad file: {:?}. Loading...",
                     mad_path
                 );
                 if let Ok(mad_bytes) = std::fs::read(&mad_path) {
                     match parse_mad_bytes(&mad_bytes, &model.joints) {
                         Ok(anims) => {
-                            println!(
+                            crate::pdbg!(
                                 "[RUST] Loaded {} animations from companion MAD file.",
                                 anims.len()
                             );
                             model.animations = anims;
                         }
                         Err(e) => {
-                            println!("[RUST] WARNING: Failed to parse companion MAD file: {}", e);
+                            crate::pdbg!("[RUST] WARNING: Failed to parse companion MAD file: {}", e);
                         }
                     }
                 }
@@ -1449,7 +1449,7 @@ impl HODModel {
                     },
                     tracks: parsed_tracks,
                 });
-                println!(
+                crate::pdbg!(
                     "[RUST] Loaded HOD 1.0 embedded anims with {} tracks.",
                     model.animations[0].tracks.len()
                 );
@@ -1818,7 +1818,7 @@ fn append_hod1_primitive_indices(indices: &mut Vec<u16>, prim_type: u32, raw: &[
 }
 
 fn parse_basic_mesh(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HODMesh, String> {
-    println!(
+    crate::pdbg!(
         "[RUST] BMSH raw data (len={}): {:02x?}",
         chunk.data.len(),
         &chunk.data[..std::cmp::min(128, chunk.data.len())]
@@ -1831,7 +1831,7 @@ fn parse_basic_mesh(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HO
         .read_i32::<LittleEndian>()
         .map_err(|e| e.to_string())? as usize;
 
-    println!(
+    crate::pdbg!(
         "  parse_basic_mesh ID={} lod={} parts={}",
         chunk.id, lod, part_count
     );
@@ -1904,7 +1904,7 @@ fn parse_basic_mesh(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HO
             let indice_count = reader
                 .read_i32::<LittleEndian>()
                 .map_err(|e| e.to_string())? as usize;
-            println!("    Part {} - verts={} indices={} mesh_pos={} face_pos={} mask=0x{:X} stride={} cumulative_vert={}", p_idx, vertex_count, indice_count, context.mesh_pool.position(), context.face_pool.position(), vertex_mask, vertex_stride, cumulative_vertex_offset);
+            crate::pdbg!("    Part {} - verts={} indices={} mesh_pos={} face_pos={} mask=0x{:X} stride={} cumulative_vert={}", p_idx, vertex_count, indice_count, context.mesh_pool.position(), context.face_pool.position(), vertex_mask, vertex_stride, cumulative_vertex_offset);
 
             for v_idx in 0..vertex_count {
                 let v = read_vertex(
@@ -1939,7 +1939,7 @@ fn parse_basic_mesh(chunk: &IffChunk, context: &mut ParsingContext) -> Result<HO
                 };
                 indices.push(safe_idx);
             }
-            println!(
+            crate::pdbg!(
                 "      First 20 parsed indices of Part {}: {:?}",
                 p_idx,
                 &raw_indices[..std::cmp::min(20, raw_indices.len())]
@@ -2069,7 +2069,7 @@ fn parse_dock_extended(data: &[u8]) -> Result<Vec<HODDockpath>, String> {
         let num_points = num_points as usize;
 
         let remaining_bytes = r.get_ref().len() as u64 - r.position();
-        println!("[DOCK DEBUG] path='{}', num_points={}, remaining={}", name, num_points, remaining_bytes);
+        crate::pdbg!("[DOCK DEBUG] path='{}', num_points={}, remaining={}", name, num_points, remaining_bytes);
 
         let max_possible_points = remaining_bytes / 50;
         if num_points as u64 > max_possible_points {
@@ -2342,7 +2342,7 @@ fn parse_joints(chunk: &IffChunk) -> Result<Vec<HODJoint>, String> {
     let first_val = reader
         .read_u32::<LittleEndian>()
         .map_err(|e| e.to_string())?;
-    println!("[RUST] HIER chunk first_val: 0x{:08X}", first_val);
+    crate::pdbg!("[RUST] HIER chunk first_val: 0x{:08X}", first_val);
 
     // HOD 2.0 stores the joint count as a full signed negative value.
     // Large hierarchies can exceed 255 joints (e.g. -298 = 0xFFFFFED6),
