@@ -693,7 +693,7 @@ fn generate_lmip_texture_chunks_and_pool(
         let (mut rgba, width, height) = match decode_texture_png_rgba(texture) {
             Ok(Some((rgba, w, h))) if w > 0 && h > 0 => (rgba, w, h),
             _ => {
-                println!("[TEX-DEBUG-SAVE] WARNING: Texture '{}' failed to decode or was empty. Injecting 4x4 magenta fallback to prevent material index desync.", texture.name);
+                crate::pdbg!("[TEX-DEBUG-SAVE] WARNING: Texture '{}' failed to decode or was empty. Injecting 4x4 magenta fallback to prevent material index desync.", texture.name);
                 let w = 4;
                 let h = 4;
                 let mut fallback = vec![0u8; w * h * 4];
@@ -706,7 +706,7 @@ fn generate_lmip_texture_chunks_and_pool(
                 (fallback, w as u32, h as u32)
             }
         };
-        println!(
+        crate::pdbg!(
             "[TEX-DEBUG-SAVE] Writing texture '{}' ({}x{}, format={})",
             texture.name, width, height, texture.format
         );
@@ -727,7 +727,7 @@ fn generate_lmip_texture_chunks_and_pool(
         if mip_count == 0 {
             mip_count = 1;
         }
-        println!("[TEX-DEBUG-SAVE] Generated {} mip levels", mip_count);
+        crate::pdbg!("[TEX-DEBUG-SAVE] Generated {} mip levels", mip_count);
 
         let mips = generate_mip_chain(&rgba, width as usize, height as usize, mip_count as usize);
 
@@ -1164,12 +1164,12 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
             xpress::decompress(&comp_face, decomp_face_len)?
         };
 
-        println!("[RUST] Collision mesh pool append: {} collision meshes, decomp_mesh={} bytes, decomp_face={} bytes", model.collision_meshes.len(), decomp_mesh.len(), decomp_face.len());
+        crate::pdbg!("[RUST] Collision mesh pool append: {} collision meshes, decomp_mesh={} bytes, decomp_face={} bytes", model.collision_meshes.len(), decomp_mesh.len(), decomp_face.len());
 
         // Append collision mesh vertices to mesh stream
         for cm in &model.collision_meshes {
             for part in &cm.mesh.parts {
-                println!(
+                crate::pdbg!(
                     "[RUST]   Collision part: {} vertices, {} indices, mask=0x{:x}",
                     part.vertices.len(),
                     part.indices.len(),
@@ -1221,7 +1221,7 @@ pub fn generate_v2_from_model(original_bytes: &[u8], model: &HODModel) -> Result
         let new_comp_mesh = decomp_mesh.clone();
         let new_comp_face = decomp_face.clone();
 
-        println!("[RUST] After collision append: decomp_mesh={} bytes, decomp_face={} bytes, new_comp_mesh={} bytes, new_comp_face={} bytes", decomp_mesh.len(), decomp_face.len(), new_comp_mesh.len(), new_comp_face.len());
+        crate::pdbg!("[RUST] After collision append: decomp_mesh={} bytes, decomp_face={} bytes, new_comp_mesh={} bytes, new_comp_face={} bytes", decomp_mesh.len(), decomp_face.len(), new_comp_mesh.len(), new_comp_face.len());
 
         let mut new_pool = Vec::new();
         new_pool

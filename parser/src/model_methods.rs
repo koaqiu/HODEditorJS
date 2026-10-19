@@ -336,7 +336,7 @@ impl HODModel {
         self.joints.retain(|j| {
             let is_self_parented = j.parent_name.as_deref() == Some(&j.name);
             if is_self_parented && names_with_real_joint.contains(&j.name) {
-                println!(
+                crate::pdbg!(
                     "[RUST] clean_hierarchy: Removing duplicate self-parented joint '{}'",
                     j.name
                 );
@@ -359,7 +359,7 @@ impl HODModel {
             if *count > 1 {
                 let new_name = format!("{}_{}", joint.name, count);
                 renames.insert(joint.name.clone(), new_name.clone());
-                println!(
+                crate::pdbg!(
                     "[RUST] WARNING: Duplicate joint name '{}' found. Renamed to '{}'.",
                     joint.name, new_name
                 );
@@ -376,7 +376,7 @@ impl HODModel {
             *count += 1;
             if *count > 1 {
                 let new_name = format!("{}_{}", mesh.name, count);
-                println!(
+                crate::pdbg!(
                     "[RUST] WARNING: Duplicate mesh name '{}' lod {} found. Renamed to '{}'.",
                     mesh.name, mesh.lod, new_name
                 );
@@ -548,7 +548,7 @@ impl HODModel {
                             && base_width > 0
                             && base_height > 0
                         {
-                            println!(
+                            crate::pdbg!(
                                 "[RUST] Autofixing texture '{}' dimensions from {}x{} to {}x{}",
                                 new_tex.name,
                                 new_tex.width,

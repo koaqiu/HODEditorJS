@@ -489,7 +489,7 @@ pub fn compile_model_meshes(model: &mut HODModel) -> Vec<CompiledMesh> {
     let mut compiled_meshes = Vec::new();
 
     for mesh in &mut model.meshes {
-        println!("[DEBUG] Compiling mesh: {} lod={}", mesh.name, mesh.lod);
+        crate::pdbg!("[DEBUG] Compiling mesh: {} lod={}", mesh.name, mesh.lod);
         let mut new_parts = Vec::new();
         if !mesh.has_mult_tags {
             for part in &mut mesh.parts {
@@ -501,7 +501,7 @@ pub fn compile_model_meshes(model: &mut HODModel) -> Vec<CompiledMesh> {
                         .all(|(idx, &vertex_idx)| vertex_idx as usize == idx);
 
                 let should_generate_tangents = should_generate_tangent_space(part, &part.vertices);
-                println!(
+                crate::pdbg!(
                     "[DEBUG]   Part verts={}, indices={}, is_flat={}, should_gen_tangents={}",
                     part.vertices.len(),
                     part.indices.len(),
@@ -556,7 +556,7 @@ pub fn compile_model_meshes(model: &mut HODModel) -> Vec<CompiledMesh> {
         });
     }
 
-    println!("[DEBUG] Finished compile_meshes.");
+    crate::pdbg!("[DEBUG] Finished compile_meshes.");
     compiled_meshes
 }
 
@@ -566,7 +566,7 @@ pub fn generate_pool_data(
     decomp_tex_len: u32,
     pool_type: u32,
 ) -> std::io::Result<Vec<u8>> {
-    println!("[DEBUG] Starting generate_pool_data...");
+    crate::pdbg!("[DEBUG] Starting generate_pool_data...");
     let mut decomp_mesh = Vec::new();
     let mut decomp_face = Vec::new();
 

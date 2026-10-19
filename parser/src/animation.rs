@@ -249,13 +249,13 @@ pub fn parse_mad_bytes(bytes: &[u8], joints: &[HODJoint]) -> Result<Vec<HODAnima
         }
         keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
 
-        println!(
+        crate::pdbg!(
             "[DEBUG] Curve '{}' has {} keyframes:",
             name,
             keyframes.len()
         );
         for kf in &keyframes {
-            println!("  kf time={:.3}s value={:.6}", kf.time, kf.value);
+            crate::pdbg!("  kf time={:.3}s value={:.6}", kf.time, kf.value);
         }
 
         let pre_infinity = r_curv
